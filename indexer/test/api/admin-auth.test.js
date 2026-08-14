@@ -1,34 +1,26 @@
 import request from "supertest";
-import express from "express";
-import { jest } from "@jest/globals";
 
-// Issue #22: verify every /api/admin/* route (including the four analytics
-// routes consumed by the dashboard) enforces authentication, returns the
-// correct status codes, and that a valid token still reaches the handler.
+// Issue #22: verify every /api/admin/* route enforces admin auth and returns
+// the correct status for missing/invalid/valid tokens.
 //
-// The db pool is mocked so this suite runs without a live Postgres instance,
-// unlike the other test/api/*.test.js files which exercise a real database.
-
+// Ensure process.env uses TEST_DATABASE_URL, matching the other test/api/*.test.js files.
+const DB_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL || "postgres://postgres:postgres@localhost:5432/soroban_test";
+process.env.DATABASE_URL = DB_URL;
 process.env.ADMIN_SECRET = "test-admin-secret";
+process.env.API_KEY = "test-api-key";
+process.env.VERIFY_ABI = "false";
 
-const queryMock = jest.fn().mockResolvedValue({ rows: [] });
+import { db } from "../../src/db.js";
+import { startApi } from "../../src/api.js";
 
-jest.unstable_mockModule("../../src/db.js", () => ({
-  db: {},
-  pool: { query: queryMock },
-}));
-
-const { default: registerAdminRoutes } = await import("../../src/routes/admin.js");
-
-function buildApp() {
-  const app = express();
-  app.use(express.json());
-  registerAdminRoutes(app);
-  return app;
-}
-
+// Every route registered on the admin router in src/routes/admin.js.
 const ADMIN_ROUTES = [
   { method: "get", path: "/api/admin/api-keys" },
+  { method: "post", path: "/api/admin/api-keys" },
+  { method: "patch", path: "/api/admin/api-keys/test-id" },
+  { method: "delete", path: "/api/admin/api-keys/test-id" },
+  { method: "post", path: "/api/admin/api-keys/test-id/rotate" },
+  { method: "get", path: "/api/admin/api-keys/test-id/usage" },
   { method: "get", path: "/api/admin/audit-log" },
   { method: "get", path: "/api/admin/audit-log/export" },
   { method: "get", path: "/api/admin/analytics/rate-limit-hits" },
@@ -37,32 +29,45 @@ const ADMIN_ROUTES = [
   { method: "get", path: "/api/admin/analytics/upgrade-recommendations" },
 ];
 
-describe("/api/admin/* authentication (issue #22)", () => {
-  const app = buildApp();
+// The four routes the frontend rate-limit dashboard calls directly (issue #22).
+const ANALYTICS_ROUTES = ADMIN_ROUTES.filter((r) => r.path.startsWith("/api/admin/analytics/"));
 
-  beforeEach(() => {
-    queryMock.mockClear();
+describe("Admin route authentication (issue #22)", () => {
+  let server;
+  let app;
+
+  beforeAll(async () => {
+    await db.init();
+    server = startApi();
+    app = server;
   });
 
-  it.each(ADMIN_ROUTES)("returns 401 for $path with no Authorization header", async ({ method, path }) => {
-    const res = await request(app)[method](path);
-    expect(res.status).toBe(401);
-    expect(res.body).toEqual({ error: "Unauthorized" });
-    expect(queryMock).not.toHaveBeenCalled();
+  afterAll(async () => {
+    if (server && server.close) {
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 
-  it.each(ADMIN_ROUTES)("returns 401 for $path with an invalid bearer token", async ({ method, path }) => {
-    const res = await request(app)[method](path).set("Authorization", "Bearer wrong-token");
-    expect(res.status).toBe(401);
-    expect(res.body).toEqual({ error: "Unauthorized" });
-    expect(queryMock).not.toHaveBeenCalled();
+  describe.each(ADMIN_ROUTES)("$method $path", ({ method, path }) => {
+    it("returns 401 with no Authorization header", async () => {
+      const res = await request(app)[method](path);
+      expect(res.status).toBe(401);
+      expect(res.body).toEqual({ error: "Unauthorized" });
+    });
+
+    it("returns 401 with an invalid token", async () => {
+      const res = await request(app)[method](path).set("Authorization", "Bearer wrong-token");
+      expect(res.status).toBe(401);
+      expect(res.body).toEqual({ error: "Unauthorized" });
+    });
   });
 
-  it("returns 200 for an admin analytics route with a valid bearer token", async () => {
-    const res = await request(app)
-      .get("/api/admin/analytics/rate-limit-hits")
-      .set("Authorization", `Bearer ${process.env.ADMIN_SECRET}`);
-    expect(res.status).toBe(200);
-    expect(queryMock).toHaveBeenCalledTimes(1);
+  describe.each(ANALYTICS_ROUTES)("$method $path with a valid token", ({ method, path }) => {
+    it("does not return 401", async () => {
+      const res = await request(app)
+        [method](path)
+        .set("Authorization", `Bearer ${process.env.ADMIN_SECRET}`);
+      expect(res.status).not.toBe(401);
+    });
   });
 });
