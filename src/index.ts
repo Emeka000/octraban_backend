@@ -35,6 +35,7 @@ import { asyncHandler } from './middleware/asyncHandler';
 import { rejectUntrustedForwardedHeaders } from './middleware/proxyTrust';
 import { billingRouter } from './services/stripe-billing';
 import { logger } from './logger';
+import { validateJwtKeysAtStartup } from './auth/keys';
 import { feedOrchestrator } from './feed/orchestrator';
 import { startPriceUpdater, stopPriceUpdater } from './services/pricing';
 import { startBridgeWorker, stopBridgeWorker } from './bridge-tracker';
@@ -344,6 +345,8 @@ async function validateStateDumpPath(): Promise<void> {
 async function main() {
   registerShutdownHandlers();
   await validateStateDumpPath();
+
+  validateJwtKeysAtStartup();
 
   await initRateLimitStore();
 

@@ -45,7 +45,7 @@ describe("scValToJs - ScVal type conversion", () => {
   });
 
   it("handles scvTimepoint as BigInt", () => {
-    const scv = xdr.ScVal.scvTimepoint(xdr.TimePoint.fromString("1000"));
+    const scv = xdr.ScVal.scvTimepoint(xdr.Uint64.fromString("1000"));
     assert.equal(scValToJs(scv), 1000n);
   });
 
@@ -134,7 +134,7 @@ describe("scValToJs - ScVal type conversion", () => {
   it("handles scvAddress - account", () => {
     const ed25519 = Buffer.alloc(32, 0xaa);
     const scv = xdr.ScVal.scvAddress(
-      xdr.ScAddress.scAddressTypeAccount(xdr.PublicKey.publicKeyTypeEd25519(ed25519))
+      xdr.ScAddress.scAddressTypeAccount(xdr.AccountId.publicKeyTypeEd25519(ed25519))
     );
     const expected = StrKey.encodeEd25519PublicKey(ed25519);
     assert.equal(scValToJs(scv), expected);
