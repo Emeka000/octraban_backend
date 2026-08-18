@@ -75,6 +75,27 @@ jobs:
           TESTNET_DATABASE_URL: postgresql://test:test@localhost:5432/test
           STELLAR_NETWORK: testnet
 
+  indexer-coverage:
+    name: Indexer Coverage
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: indexer
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: indexer/package-lock.json
+
+      - name: Install indexer dependencies
+        run: npm ci
+
+      - name: Run indexer coverage (enforces thresholds)
+        run: npm run test:coverage
+
   openapi-drift:
     name: Indexer OpenAPI Drift Check
     runs-on: ubuntu-latest

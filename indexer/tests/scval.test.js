@@ -45,7 +45,7 @@ describe("scValToJs - ScVal type conversion", () => {
   });
 
   it("handles scvTimepoint as BigInt", () => {
-    const scv = xdr.ScVal.scvTimepoint(xdr.Timepoint.fromString("1000"));
+    const scv = xdr.ScVal.scvTimepoint(xdr.Uint64.fromString("1000"));
     assert.equal(scValToJs(scv), 1000n);
   });
 
@@ -99,7 +99,7 @@ describe("scValToJs - ScVal type conversion", () => {
   });
 
   it("handles scvBytes as hex string", () => {
-    const scv = xdr.ScVal.scvBytes(Buffer.from("hello", "hex"));
+    const scv = xdr.ScVal.scvBytes(Buffer.from("hello"));
     assert.equal(scValToJs(scv), "68656c6c6f");
   });
 
@@ -134,7 +134,7 @@ describe("scValToJs - ScVal type conversion", () => {
   it("handles scvAddress - account", () => {
     const ed25519 = Buffer.alloc(32, 0xaa);
     const scv = xdr.ScVal.scvAddress(
-      xdr.ScAddress.scAddressTypeAccount(ed25519)
+      xdr.ScAddress.scAddressTypeAccount(xdr.AccountId.publicKeyTypeEd25519(ed25519))
     );
     const expected = StrKey.encodeEd25519PublicKey(ed25519);
     assert.equal(scValToJs(scv), expected);
@@ -156,7 +156,7 @@ describe("scValToJs - ScVal type conversion", () => {
 
   it("handles scvLedgerKeyNonce", () => {
     const scv = xdr.ScVal.scvLedgerKeyNonce(
-      new xdr.LedgerKeyNonce({ nonce: xdr.Uint64.fromString("123") })
+      new xdr.ScNonceKey({ nonce: xdr.Int64.fromString("123") })
     );
     assert.deepEqual(scValToJs(scv), { type: "ledgerKeyNonce", nonce: 123n });
   });
@@ -287,7 +287,7 @@ describe("buildTypeIndex", () => {
   });
 
   it("ignores entries without name", () => {
-    const types = [{ kind: "struct" }, { name: "OnlyNamed" }];
+    const types = [{ kind: "struct" }, { name: "OnlyNamed", kind: "struct" }];
     const index = buildTypeIndex(types);
     assert.equal(index.size, 1);
     assert.equal(index.get("OnlyNamed").kind, "struct");

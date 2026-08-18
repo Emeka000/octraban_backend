@@ -9,7 +9,7 @@
     "test:decoder": "node --test tests/decoder.test.js",
     "test:decoder-parity": "node --test tests/decoder-parity.test.js",
     "test:scval": "node --test tests/scval.test.js",
-    "test:coverage": "c8 --reporter=text --reporter=lcov node --test tests/decoder.test.js tests/decoder-parity.test.js tests/scval.test.js"
+    "test:coverage": "node --experimental-test-coverage --test-coverage-include=src/scval.js --test-coverage-include=src/xdr_decoder.js --test-coverage-include=src/int128.js --test-coverage-lines=88 --test-coverage-branches=70 --test-coverage-functions=88 --test tests/decoder.test.js tests/decoder-parity.test.js tests/scval.test.js"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "12.3.0",
