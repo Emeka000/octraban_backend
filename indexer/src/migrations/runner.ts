@@ -44,7 +44,7 @@ export class MigrationOrchestrator {
           [version]
         );
         
-        if (isExecuted.rowCount > 0) continue;
+        if ((isExecuted.rowCount ?? 0) > 0) continue;
 
         console.log(`Running migration: ${file}`);
         
@@ -64,7 +64,7 @@ export class MigrationOrchestrator {
             console.log(`Successfully completed ${file} in ${duration}ms`);
           } catch (err) {
             await this.dbClient.query('ROLLBACK');
-            throw new Error(`Migration ${file} failed: ${err.message}`);
+            throw new Error(`Migration ${file} failed: ${err instanceof Error ? err.message : String(err)}`);
           }
         }
       }

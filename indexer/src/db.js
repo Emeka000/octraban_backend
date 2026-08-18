@@ -1,3 +1,4 @@
+// @ts-check
 import pg from "pg";
 import { runMigrations } from "./migrate.js";
 import { validateAndSanitizeDecodedEvent } from "./decoderValidator.js";
@@ -19,6 +20,7 @@ export const db = {
   },
 
   // ── daemon cursor persistence ──────────────────────────────────
+  /** @param {number} ledger */
   async saveCursor(ledger) {
     await pool.query(
       `INSERT INTO daemon_state (key, value) VALUES ('cursor', $1)
@@ -41,7 +43,7 @@ export const db = {
    *           after_seq?: number, limit?: number }} opts
    *   after_seq — the `seq` of the last event on the previous page (opaque cursor).
    *               Omit (or pass 0) for the first page.
-   * @returns {{ data: object[], next_cursor: number|null }}
+   * @returns {Promise<{ data: object[], next_cursor: number|null }>}
    */
   async getEventsCursor({ contract, fn, type, after_seq = 0, limit = 25 } = {}) {
     const conditions = [];
@@ -83,6 +85,7 @@ export const db = {
     return { data, next_cursor };
   },
 
+  /** @param {import('./decoder.js').DecodedEvent} ev */
   async upsertEvent(ev) {
     await pool.query(
       `INSERT INTO events
@@ -124,14 +127,15 @@ export const db = {
    * - Increments decoder_schema_violations_total metric
    * - Still inserts the record with sanitized data (corruption guard)
    *
-   * @param {object} ev - The decoded event object from decoder
-   * @param {object} logger - Optional logger instance (defaults to console)
+   * @param {import('./decoder.js').DecodedEvent} ev - The decoded event object from decoder
+   * @param {{ error: (...args: any[]) => void }} [logger] - Optional logger instance (defaults to console)
    */
   async upsertEventValidated(ev, logger) {
     const validated = validateAndSanitizeDecodedEvent(ev, logger);
     await this.upsertEvent(validated);
   },
 
+  /** @param {{ contract?: string, fn?: string, page?: number, limit?: number, type?: string }} [opts] */
   async getEvents({ contract, fn, page = 1, limit = 25, type } = {}) {
     const conditions = [];
     const params = [];
@@ -162,12 +166,14 @@ export const db = {
     return rows;
   },
 
+  /** @param {number} seq */
   async getEvent(seq) {
     const sql = "SELECT * FROM events WHERE seq = $1";
     const { rows } = await pool.query(sql, [seq]);
     return rows[0] ?? null;
   },
 
+  /** @param {string} address */
   async getWalletEvents(address) {
     // Use the GIN full-text index via plainto_tsquery so the query uses the
     // idx_events_search_fts index instead of a full-table raw_topics::text scan.
@@ -185,10 +191,15 @@ export const db = {
     return rows;
   },
 
+  /**
+   * @param {string} q
+   * @param {{ limit?: number }} [opts]
+   */
   async searchContracts(q, { limit = 10 } = {}) {
     const terms = normalizeSearchTerms(q);
     if (!terms.length) return [];
 
+    /** @type {any[]} */
     const params = [];
     const ftsQuery = pushParam(params, q.trim());
     const fts = `to_tsvector('simple', coalesce(c.name, '') || ' ' || coalesce(c.description, '') || ' ' || coalesce(c.id, '') || ' ' || coalesce(c.functions::text, '')) @@ plainto_tsquery('simple', ${ftsQuery})`;
@@ -222,10 +233,15 @@ export const db = {
     }));
   },
 
+  /**
+   * @param {string} q
+   * @param {{ limit?: number }} [opts]
+   */
   async searchEvents(q, { limit = 10 } = {}) {
     const terms = normalizeSearchTerms(q);
     if (!terms.length) return [];
 
+    /** @type {any[]} */
     const params = [];
     const ftsQuery = pushParam(params, q.trim());
     const fts = `to_tsvector('simple', coalesce(e.description, '') || ' ' || coalesce(e.function, '') || ' ' || coalesce(e.contract_id, '') || ' ' || coalesce(e.tx_hash, '') || ' ' || coalesce(e.raw_topics::text, '') || ' ' || coalesce(e.raw_data, '')) @@ plainto_tsquery('simple', ${ftsQuery})`;
@@ -253,11 +269,17 @@ export const db = {
     return rows;
   },
 
+  /**
+   * @param {string} q
+   * @param {{ limit?: number }} [opts]
+   */
   async searchWallets(q, { limit = 10 } = {}) {
     const terms = normalizeSearchTerms(q);
     if (!terms.length) return [];
 
-    const params = terms.map((term) => pushParam(params, `%${escapeLike(term)}%`));
+    /** @type {any[]} */
+    const params = [];
+    terms.forEach((term) => pushParam(params, `%${escapeLike(term)}%`));
     params.push(clampLimit(limit, 10, 50));
 
     const { rows } = await pool.query(
@@ -303,6 +325,10 @@ export const db = {
     }));
   },
 
+  /**
+   * @param {string} q
+   * @param {{ limit?: number }} [opts]
+   */
   async searchSuggestions(q, { limit = 10 } = {}) {
     const terms = normalizeSearchTerms(q);
     if (!terms.length) return [];
@@ -370,6 +396,7 @@ export const db = {
     ].slice(0, limitN);
   },
 
+  /** @param {string} id */
   async getContractMeta(id) {
     const sql = "SELECT * FROM contracts WHERE id = $1";
     const { rows } = await pool.query(sql, [id]);
@@ -382,6 +409,7 @@ export const db = {
    * @param {{ function_name?: string, start_ledger?: number, end_ledger?: number, page?: number, limit?: number }} opts
    */
   async getContractTransactions(contractId, { function_name, start_ledger, end_ledger, page = 1, limit = 25 } = {}) {
+    /** @type {any[]} */
     const params = [contractId];
     const conditions = ["contract_id = $1"];
 
@@ -449,7 +477,10 @@ export const db = {
     return { volume_raw: raw, volume_scaled, decimals };
   },
 
-  /** Return all upgrade events for a contract in ledger order. */
+  /**
+   * Return all upgrade events for a contract in ledger order.
+   * @param {string} contractId
+   */
   async getUpgradeHistory(contractId) {
     const { rows } = await pool.query(
       `SELECT seq, ledger, tx_hash, upgrade_info, created_at
@@ -461,6 +492,12 @@ export const db = {
     return rows;
   },
 
+  /**
+   * @param {{ id: string, name?: string, description?: string, functions?: unknown,
+   *           registered_by?: string, source_files?: unknown, has_circuit_breaker?: boolean,
+   *           is_rwa?: boolean, rwa_type?: string, version?: number, abi_version?: number,
+   *           min_ledger?: number }} meta
+   */
   async upsertContractMeta(meta) {
     await pool.query(
       `INSERT INTO contracts (id, name, description, functions, registered_by, source_files, has_circuit_breaker, is_rwa, rwa_type, version, abi_version, min_ledger)
@@ -506,6 +543,10 @@ export const db = {
    * Returns the version whose min_ledger <= target_ledger, ordered by
    * abi_version descending (latest applicable version wins).
    */
+  /**
+   * @param {string} contractId
+   * @param {number} targetLedger
+   */
   async getContractMetaByLedger(contractId, targetLedger) {
     const { rows } = await pool.query(
       `SELECT * FROM contract_versions
@@ -518,6 +559,11 @@ export const db = {
   },
 
   // Circuit breaker status tracking
+  /**
+   * @param {string} contractId
+   * @param {boolean} isPaused
+   * @param {number} ledger
+   */
   async updateCircuitBreakerStatus(contractId, isPaused, ledger) {
     await pool.query(`UPDATE contracts SET is_paused = $1, pause_status_ledger = $2 WHERE id = $3`, [
       isPaused,
@@ -526,6 +572,7 @@ export const db = {
     ]);
   },
 
+  /** @param {string} contractId */
   async getCircuitBreakerStatus(contractId) {
     const { rows } = await pool.query(
       `SELECT has_circuit_breaker, is_paused, pause_status_ledger FROM contracts WHERE id = $1`,
@@ -540,6 +587,7 @@ export const db = {
     );
   },
 
+  /** @param {string} contractId */
   async getMigrationStatus(contractId) {
     const { rows } = await pool.query(
       `SELECT
@@ -561,6 +609,7 @@ export const db = {
 
   // ── Vault indexer methods ──────────────────────────────────────────────────────
 
+  /** @param {{ contract_id: string, name?: string, underlying_asset?: string, decimals?: number }} vault */
   async registerVault(vault) {
     await pool.query(
       `INSERT INTO vaults (contract_id, name, underlying_asset, decimals)
@@ -571,6 +620,7 @@ export const db = {
     );
   },
 
+  /** @param {string} contractId */
   async unregisterVault(contractId) {
     await pool.query("DELETE FROM vaults WHERE contract_id = $1", [contractId]);
   },
@@ -585,6 +635,7 @@ export const db = {
     return rows;
   },
 
+  /** @param {string} contractId */
   async getVault(contractId) {
     // Conflict-resolution note (resolved 2026-06-18):
     // feature/vault-pagination added `limit` param; feature/vault-status added `active` filter.
@@ -605,6 +656,7 @@ export const db = {
     return rows.map((r) => r.contract_id);
   },
 
+  /** @param {{ contract_id: string, ledger: number, total_assets: string | number, total_supply: string | number, ratio: string | number }} snapshot */
   async upsertVaultSnapshot(snapshot) {
     await pool.query(
       `INSERT INTO vault_snapshots (contract_id, ledger, total_assets, total_supply, ratio)
@@ -613,6 +665,10 @@ export const db = {
     );
   },
 
+  /**
+   * @param {string} contractId
+   * @param {{ limit?: number }} [opts]
+   */
   async getVaultHistory(contractId, { limit = 100 } = {}) {
     const { rows } = await pool.query(
       `SELECT * FROM vault_snapshots
@@ -625,7 +681,10 @@ export const db = {
 
   // ── Privileged roles ───────────────────────────────────────────────────────
 
-  /** Upsert a role assignment (or revocation) for a contract. */
+  /**
+   * Upsert a role assignment (or revocation) for a contract.
+   * @param {{ contract_id: string, role: string, address: string, revoked?: boolean, ledger?: number | null }} params
+   */
   async upsertRole({ contract_id, role, address, revoked = false, ledger = null }) {
     await pool.query(
       `INSERT INTO privileged_roles (contract_id, role, address, revoked, ledger, updated_at)
@@ -637,6 +696,7 @@ export const db = {
   },
 
   /** Return all active (non-revoked) role holders for a contract. */
+  /** @param {string} contractId */
   async getRoles(contractId) {
     const { rows } = await pool.query(
       `SELECT role, address, ledger, updated_at
@@ -648,14 +708,21 @@ export const db = {
     return rows;
   },
 
-  /** Raw query passthrough — used by bulkLoader and pruner. */
+  /**
+   * Raw query passthrough — used by bulkLoader and pruner.
+   * @param {string} sql
+   * @param {any[]} [params]
+   */
   async query(sql, params) {
     return pool.query(sql, params);
   },
 
   // ── multi-signature source verification ────────────────────────
 
-  /** Submit a verification signature for a contract's WASM hash. */
+  /**
+   * Submit a verification signature for a contract's WASM hash.
+   * @param {{ contract_id: string, wasm_hash: string, signer: string, signature: string, compiler_hash?: string }} params
+   */
   async addSourceVerification({ contract_id, wasm_hash, signer, signature, compiler_hash }) {
     await pool.query(
       `INSERT INTO source_verifications (contract_id, wasm_hash, signer, signature, compiler_hash)
@@ -666,8 +733,13 @@ export const db = {
     );
   },
 
-  /** Return all verification signatures for a contract + wasm_hash pair. */
+  /**
+   * Return all verification signatures for a contract + wasm_hash pair.
+   * @param {string} contract_id
+   * @param {string} [wasm_hash]
+   */
   async getSourceVerifications(contract_id, wasm_hash) {
+    /** @type {any[]} */
     const params = [contract_id];
     const extra = wasm_hash ? ` AND wasm_hash = $2` : "";
     if (wasm_hash) params.push(wasm_hash);
@@ -683,11 +755,15 @@ export const db = {
 
   // ── storage state-diff timeline ────────────────────────────────
 
-  /** Persist a batch of storage state diffs for a transaction. */
+  /**
+   * Persist a batch of storage state diffs for a transaction.
+   * @param {{ contract_id: string, ledger: number, tx_hash: string, key: string, tier: string,
+   *           old_value?: string | null, new_value?: string | null, change_type: string }[]} diffs
+   */
   async insertStateDiffs(diffs) {
     if (!diffs.length) return;
     const values = diffs
-      .map((_, i) => {
+      .map((/** @type {any} */ _, /** @type {number} */ i) => {
         const b = i * 8;
         return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8})`;
       })
@@ -711,8 +787,13 @@ export const db = {
     );
   },
 
-  /** Return chronological state diffs for a contract, optionally filtered by key. */
+  /**
+   * Return chronological state diffs for a contract, optionally filtered by key.
+   * @param {string} contract_id
+   * @param {{ key?: string, limit?: number }} [opts]
+   */
   async getStateDiffs(contract_id, { key, limit = 200 } = {}) {
+    /** @type {any[]} */
     const params = [contract_id];
     const extra = key ? ` AND key = $2` : "";
     if (key) params.push(key);
@@ -730,6 +811,11 @@ export const db = {
 
   // ── WASM build metadata ────────────────────────────────────────────────────
 
+  /**
+   * @param {{ wasm_hash: string, contract_id?: string, sdk_version?: string, compiler?: string,
+   *           optimizer?: string, repository?: string, commit?: string, producers?: unknown,
+   *           ledger?: number, tx_hash?: string }} params
+   */
   async upsertWasmBuildMetadata({
     wasm_hash,
     contract_id,
@@ -769,6 +855,7 @@ export const db = {
     );
   },
 
+  /** @param {string} contract_id */
   async getWasmBuildMetadata(contract_id) {
     const { rows } = await pool.query(
       `SELECT * FROM wasm_build_metadata WHERE contract_id = $1 ORDER BY ledger DESC LIMIT 1`,
@@ -777,11 +864,15 @@ export const db = {
     return rows[0] ?? null;
   },
 
-  /** persist sub-invocation records. */
+  /**
+   * persist sub-invocation records.
+   * @param {{ parent_tx_hash: string, depth: number, contract_id: string, function: string,
+   *           args?: unknown, ledger: number }[]} records
+   */
   async upsertSubInvocations(records) {
     if (!records.length) return;
     const values = records
-      .map((r, i) => {
+      .map((/** @type {any} */ r, /** @type {number} */ i) => {
         const base = i * 6;
         return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6})`;
       })
@@ -822,6 +913,7 @@ export const db = {
 
   // ── Token holders ──────────────────────────────────────────────────────────
 
+  /** @param {string} contractId */
   async getTokenHolders(contractId) {
     const { rows } = await pool.query(
       `SELECT address, balance_raw FROM token_holders
@@ -832,6 +924,12 @@ export const db = {
     return rows;
   },
 
+  /**
+   * @param {string} contractId
+   * @param {string} from
+   * @param {string} to
+   * @param {string} amount
+   */
   async applyTransfer(contractId, from, to, amount) {
     const client = await pool.connect();
     try {
@@ -859,6 +957,11 @@ export const db = {
     }
   },
 
+  /**
+   * @param {string} contractId
+   * @param {string} to
+   * @param {string} amount
+   */
   async applyMint(contractId, to, amount) {
     await pool.query(
       `INSERT INTO token_holders (contract_id, address, balance_raw)
@@ -869,6 +972,11 @@ export const db = {
     );
   },
 
+  /**
+   * @param {string} contractId
+   * @param {string} from
+   * @param {string} amount
+   */
   async applyBurn(contractId, from, amount) {
     await pool.query(
       `INSERT INTO token_holders (contract_id, address, balance_raw)
@@ -880,8 +988,10 @@ export const db = {
   },
 
   // data export — events (CSV/JSON)
+  /** @param {{ contract?: string, fn?: string, type?: string, limit?: number }} [opts] */
   async getEventsForExport({ contract, fn, type, limit = 10000 } = {}) {
     const conditions = [];
+    /** @type {any[]} */
     const params = [];
     if (contract) {
       params.push(contract);
@@ -931,6 +1041,7 @@ export const db = {
   },
 };
 
+/** @param {unknown} q */
 function normalizeSearchTerms(q) {
   return String(q ?? "")
     .trim()
@@ -939,21 +1050,35 @@ function normalizeSearchTerms(q) {
     .slice(0, 8);
 }
 
+/**
+ * @param {unknown} limit
+ * @param {number} fallback
+ * @param {number} max
+ */
 function clampLimit(limit, fallback, max) {
   const n = Number(limit);
   if (!Number.isFinite(n) || n < 1) return fallback;
   return Math.min(n, max);
 }
 
+/**
+ * @param {any[]} params
+ * @param {any} value
+ */
 function pushParam(params, value) {
   params.push(value);
   return `$${params.length}`;
 }
 
+/** @param {unknown} value */
 function escapeLike(value) {
   return String(value).replace(/([%_\\])/g, "\\$1");
 }
 
+/**
+ * @param {unknown} value
+ * @param {any} fallback
+ */
 function parseJsonField(value, fallback) {
   if (value == null) return fallback;
   if (typeof value !== "string") return value;
