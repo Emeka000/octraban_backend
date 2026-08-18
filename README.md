@@ -107,6 +107,30 @@ curl -X POST http://localhost:3000/api/v1/contracts \
   }'
 ```
 
+## JWT Authentication & Key Management
+
+The Octraban backend requires an RS256 key pair to sign and verify JWT tokens securely.
+
+### Key Generation
+In production, you **must** supply your own keys. Generate them using OpenSSL:
+```bash
+# Generate a 2048-bit RSA private key
+openssl genrsa -out private.pem 2048
+
+# Extract the public key
+openssl rsa -in private.pem -pubout -out public.pem
+```
+Set these in your environment variables `JWT_PRIVATE_KEY` and `JWT_PUBLIC_KEY`. Note that multi-line PEM strings must have their newlines replaced with literal `\n` characters in some environments (like `.env` files).
+
+### JWT Key ID and Rotation
+The `JWT_KEY_ID` uniquely identifies the active key. This supports zero-downtime key rotation.
+Because the server caches keys, a typical rotation involves:
+1. Generating a new key pair and assigning it a new `JWT_KEY_ID` (e.g., `key_2`).
+2. Updating the environment variables to use the new keys.
+3. Restarting the service. New tokens are signed with `key_2`.
+
+*Note: Never log or commit the `JWT_PRIVATE_KEY` to version control. The server performs a startup validation check and will crash if the keys are missing or malformed when `NODE_ENV=production`.*
+
 ## Environment Variables
 
 | Variable                   | Default         | Description                   |

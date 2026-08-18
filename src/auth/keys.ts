@@ -26,6 +26,41 @@ function generateRsaKeyPair(): KeyPair {
   };
 }
 
+export function validateJwtKeysAtStartup(): void {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const hasPrivateKey = !!process.env.JWT_PRIVATE_KEY;
+  const hasPublicKey = !!process.env.JWT_PUBLIC_KEY;
+
+  if (isProduction) {
+    if (!hasPrivateKey || !hasPublicKey) {
+      throw new Error(
+        'FATAL: JWT_PRIVATE_KEY and JWT_PUBLIC_KEY environment variables must be provided in production. ' +
+          'Insecure default key generation is disabled in production to prevent serious auth vulnerabilities. ' +
+          'Please generate an RS256 key pair and set these variables.',
+      );
+    }
+  }
+
+  if (hasPrivateKey || hasPublicKey) {
+    if (!hasPrivateKey || !hasPublicKey) {
+      throw new Error('FATAL: Both JWT_PRIVATE_KEY and JWT_PUBLIC_KEY must be provided together.');
+    }
+
+    try {
+      const privatePem = process.env.JWT_PRIVATE_KEY!.replace(/\\n/g, '\n');
+      const publicPem = process.env.JWT_PUBLIC_KEY!.replace(/\\n/g, '\n');
+
+      // Attempt to parse to ensure they are valid RSA keys
+      forge.pki.privateKeyFromPem(privatePem);
+      forge.pki.publicKeyFromPem(publicPem);
+    } catch (err) {
+      throw new Error(
+        `FATAL: Failed to parse provided JWT keys. Ensure they are valid RS256 PEM keys. Error: ${err}`,
+      );
+    }
+  }
+}
+
 export async function getOrCreateKeyPair(): Promise<KeyPair> {
   if (currentKeyPair) return currentKeyPair;
 
@@ -34,6 +69,8 @@ export async function getOrCreateKeyPair(): Promise<KeyPair> {
     currentKeyPair = cached;
     return cached;
   }
+
+  const isProduction = process.env.NODE_ENV === 'production';
 
   // Check env for pre-generated keys (production / HSM path)
   if (process.env.JWT_PRIVATE_KEY && process.env.JWT_PUBLIC_KEY) {
@@ -45,6 +82,12 @@ export async function getOrCreateKeyPair(): Promise<KeyPair> {
     };
     await cacheSet(KEYS_CACHE_KEY, currentKeyPair, KEY_TTL);
     return currentKeyPair;
+  }
+
+  if (isProduction) {
+    throw new Error(
+      'FATAL: JWT keys missing in production. Validation should have caught this at startup.',
+    );
   }
 
   currentKeyPair = generateRsaKeyPair();
@@ -61,12 +104,8 @@ export async function rotateKeys(): Promise<KeyPair> {
 /** Convert PEM public key to JWKS JWK format */
 function pemToJwk(publicKeyPem: string, kid: string): object {
   const pubKey = forge.pki.publicKeyFromPem(publicKeyPem);
-  const n = forge.util.encode64(
-    forge.util.hexToBytes(pubKey.n.toString(16).padStart(2, '0'))
-  );
-  const e = forge.util.encode64(
-    forge.util.hexToBytes(pubKey.e.toString(16).padStart(2, '0'))
-  );
+  const n = forge.util.encode64(forge.util.hexToBytes(pubKey.n.toString(16).padStart(2, '0')));
+  const e = forge.util.encode64(forge.util.hexToBytes(pubKey.e.toString(16).padStart(2, '0')));
   // Convert to URL-safe base64
   const toB64Url = (b64: string) => b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
   return {
