@@ -9,7 +9,7 @@
  * Test vectors use hardcoded known-good ScVal-decoded values that mirror what
  * scValToNative() would return for a real on-chain SEP-41 transfer event.
  */
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { xdr, scValToNative } from "@stellar/stellar-sdk";
 import { buildDescription } from "../src/decoder.js";

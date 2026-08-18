@@ -2,7 +2,7 @@
  * Unit tests for sac.js SAC detection and native XLM wrap/unwrap descriptions.
  * Closes #419
  */
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { Asset, Contract, Networks } from "@stellar/stellar-sdk";
 import { detectSac, detectSacAsset, sacLabel } from "../src/sac.js";

@@ -4,6 +4,7 @@ dist/
 *.log
 node/
 *.bak
+coverage/
 tests/**/*.js
 tests/**/*.js.map
 tests/**/*.d.ts

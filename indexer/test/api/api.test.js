@@ -1,5 +1,6 @@
 import request from "supertest";
 import pg from "pg";
+import { vi } from "vitest";
 
 // Ensure process.env uses TEST_DATABASE_URL
 const DB_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL || "postgres://postgres:postgres@localhost:5432/soroban_test";
@@ -92,7 +93,7 @@ describe("REST API Integration Tests", () => {
 
     it("should return 503 Service Unavailable when DB is failing", async () => {
       const originalQuery = db.query;
-      db.query = jest.fn().mockRejectedValueOnce(new Error("DB Connection Error"));
+      db.query = vi.fn().mockRejectedValueOnce(new Error("DB Connection Error"));
       
       const res = await request(app).get("/health");
       expect(res.status).toBe(503);
@@ -123,7 +124,7 @@ describe("REST API Integration Tests", () => {
 
     it("should return 503 when service is not ready", async () => {
       const originalQuery = db.query;
-      db.query = jest.fn().mockRejectedValueOnce(new Error("DB Connection Error"));
+      db.query = vi.fn().mockRejectedValueOnce(new Error("DB Connection Error"));
       
       const res = await request(app).get("/health/ready");
       expect(res.status).toBe(503);

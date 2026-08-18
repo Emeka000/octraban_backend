@@ -3,7 +3,7 @@
  * 
  * Tests schema validation, sanitization, and corruption guards
  */
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import {
   sanitizeDecodedText,
@@ -113,7 +113,10 @@ describe("decoderValidator", () => {
   });
 
   describe("validateAndSanitizeDecodedEvent", () => {
-    const validEvent = {
+    // A factory (rather than a single shared object) since
+    // validateAndSanitizeDecodedEvent mutates its input in place — reusing one
+    // instance across tests would leak fields (e.g. `decoded`) between them.
+    const makeValidEvent = () => ({
       contract_id: "CAQAAAAAAAAAAAAAAAAAABUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
       ledger: 12345,
       tx_hash: "abcd1234",
@@ -121,16 +124,16 @@ describe("decoderValidator", () => {
       description: "Transfer 100 XLM",
       raw_topics: [],
       raw_data: "{}",
-    };
+    });
 
     it("should mark valid events as decoded=true", () => {
-      const result = validateAndSanitizeDecodedEvent(validEvent);
+      const result = validateAndSanitizeDecodedEvent(makeValidEvent());
       assert.equal(result.decoded, true);
     });
 
     it("should sanitize and mark invalid events as decoded=false", () => {
       const invalid = {
-        ...validEvent,
+        ...makeValidEvent(),
         description: "<script>alert('xss')</script>Transfer 100 XLM",
       };
       const result = validateAndSanitizeDecodedEvent(invalid);
@@ -140,7 +143,7 @@ describe("decoderValidator", () => {
 
     it("should sanitize HTML in description before validation", () => {
       const event = {
-        ...validEvent,
+        ...makeValidEvent(),
         description: "Transfer <b>100</b> XLM",
       };
       const result = validateAndSanitizeDecodedEvent(event);
@@ -150,7 +153,7 @@ describe("decoderValidator", () => {
 
     it("should handle corrupted descriptions gracefully", () => {
       const corrupted = {
-        ...validEvent,
+        ...makeValidEvent(),
         description: "[object Object]",
       };
       const result = validateAndSanitizeDecodedEvent(corrupted);
@@ -161,7 +164,7 @@ describe("decoderValidator", () => {
 
     it("should truncate oversized descriptions", () => {
       const oversized = {
-        ...validEvent,
+        ...makeValidEvent(),
         description: "x".repeat(3000),
       };
       const result = validateAndSanitizeDecodedEvent(oversized);
@@ -194,7 +197,7 @@ describe("decoderValidator", () => {
     });
 
     it("should preserve decoded flag through roundtrip", () => {
-      const event = { ...validEvent };
+      const event = makeValidEvent();
       const validated = validateAndSanitizeDecodedEvent(event);
       assert.equal(validated.decoded, true);
       assert.equal(validated.contract_id, event.contract_id);

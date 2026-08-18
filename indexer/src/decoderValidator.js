@@ -1,6 +1,6 @@
 import Ajv from "ajv";
 import addFormats from "ajv-formats";
-import schema from "./decodedEvent.schema.json" assert { type: "json" };
+import schema from "./decodedEvent.schema.json" with { type: "json" };
 import { decoderSchemaViolationsTotal } from "./metrics.js";
 
 const ajv = new Ajv({ allErrors: true, strict: false });

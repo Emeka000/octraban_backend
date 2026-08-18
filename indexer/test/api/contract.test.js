@@ -4,6 +4,7 @@ import yaml from "yaml";
 import Ajv from "ajv";
 import addFormats from "ajv-formats";
 import request from "supertest";
+import { vi } from "vitest";
 
 // Ensure process.env uses TEST_DATABASE_URL
 const DB_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL || "postgres://postgres:postgres@localhost:5432/soroban_test";
@@ -130,7 +131,7 @@ describe("OpenAPI Contract Validation Tests", () => {
 
   it("should validate GET /health - 503 Response", async () => {
     const originalQuery = db.query;
-    db.query = jest.fn().mockRejectedValueOnce(new Error("DB Connection Error"));
+    db.query = vi.fn().mockRejectedValueOnce(new Error("DB Connection Error"));
     const res = await request(app).get("/health");
     expect(res.status).toBe(503);
     expect(() => validateResponse("/health", "GET", 503, res.body)).not.toThrow();

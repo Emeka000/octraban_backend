@@ -60,7 +60,7 @@ export function avgInterLedgerMs() {
  */
 export function checkOverdue() {
   const avg = avgInterLedgerMs();
-  if (!avg || !_lastLedgerAt) return null;
+  if (avg === null || !_lastLedgerAt) return null;
 
   const expectedAt = _lastLedgerAt + avg;
   const overdueByMs = Math.max(0, Date.now() - expectedAt);

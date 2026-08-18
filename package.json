@@ -41,7 +41,9 @@
     "validate:prisma": "ts-node --transpile-only scripts/validate-prisma-references.ts",
     "migrate:impact": "ts-node --transpile-only scripts/validate-prisma-references.ts --diff",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json --noEmit",
-    "test:full": "vitest run"
+    "test:full": "vitest run",
+    "test:indexer": "npm --prefix indexer test",
+    "test:all": "npm test && npm run test:indexer"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

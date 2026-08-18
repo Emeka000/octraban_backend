@@ -2,11 +2,11 @@
  * Real DB integration test.
  *
  * Requires a running PostgreSQL instance. Set TEST_DATABASE_URL in env,
- * or falls back to DATABASE_URL. If neither is set the test is skipped.
+ * or falls back to DATABASE_URL. If neither is set the suite is skipped.
  *
- * Usage (CI): TEST_DATABASE_URL=postgres://... node --test test/db_schema.test.js
+ * Usage (CI): TEST_DATABASE_URL=postgres://... npm test
  */
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import pg from "pg";
 import { runMigrations } from "../src/migrate.js";
@@ -15,19 +15,18 @@ const DB_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 
 if (!DB_URL) {
   console.warn("[db_schema.test] No TEST_DATABASE_URL set — skipping integration tests.");
-  process.exit(0);
 }
 
-describe("DB schema integration", () => {
+describe.skipIf(!DB_URL)("DB schema integration", () => {
   let pool;
 
-  before(async () => {
+  beforeAll(async () => {
     pool = new pg.Pool({ connectionString: DB_URL, max: 3 });
     // Run migrations against the real DB
     await runMigrations(pool);
   });
 
-  after(async () => {
+  afterAll(async () => {
     await pool.end();
   });
 

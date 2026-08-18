@@ -7,7 +7,7 @@ import helmet from "helmet";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import swaggerUi from "swagger-ui-express";
-import { db } from "./db.js";
+import { db as realDb } from "./db.js";
 import { analyzeSourceDependencies } from "./dependencyScanner.js";
 import { fetchTokenMetadata } from "./sep41Metadata.js";
 import { attachWebSocketServer, getTransactionStatus, onTransactionStatus, offTransactionStatus } from "./wsEvents.js";
@@ -153,6 +153,7 @@ const writeLimiter = rateLimit({
 });
 
 export function createApi({ logDestination, dbOverride } = {}) {
+  const db = dbOverride || realDb;
   const app = express();
   app.use(helmet());
   const isWildcard = process.env.CORS_ORIGINS === '*';

@@ -37,8 +37,25 @@ npm run index
 ```
 
 ### Running tests
+
+Both services use **Vitest** as their test runner.
+
 ```bash
-npm test
+npm test              # API service (root) — the curated, CI-safe subset
+npm run test:indexer  # indexer/ service — same, from the repo root
+npm run test:all      # both, one after the other
+```
+
+`npm test` and `npm --prefix indexer test` each run a subset that needs no
+external services (no live Postgres), so they're safe to run locally and in
+CI without any setup. Each package also exposes the complete suite for local
+use against a real database:
+
+```bash
+npm run test:full                # root: full suite (vitest run, no filter)
+npm --prefix indexer run test:integration  # indexer: suites that hit a real
+                                            # Postgres (needs DATABASE_URL or
+                                            # TEST_DATABASE_URL to point at one)
 ```
 
 ## Project Structure
@@ -46,13 +63,15 @@ npm test
 ```
 src/
 ├── api/          # Express route handlers
-├── indexer/      # Soroban RPC polling + XDR decoder
+├── indexer/      # Soroban RPC polling + XDR decoder (part of the root API service)
 ├── config.ts     # Env config
 ├── db.ts         # Prisma client
 └── index.ts      # App entry point
 prisma/
 ├── schema.prisma # DB schema
 └── seed.ts       # Known contract seed data
+indexer/          # Separate standalone indexer service, its own package.json
+                   # and test suite (do not confuse with src/indexer/ above)
 ```
 
 ## How to Contribute

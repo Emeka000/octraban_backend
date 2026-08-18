@@ -17,6 +17,7 @@ describe("CORS configuration", () => {
 
   afterEach(() => {
     process.env.CORS_ORIGINS = originalCorsOrigins;
+    return new Promise((resolve) => (app ? app.close(resolve) : resolve()));
   });
 
   it("should return Access-Control-Allow-Origin and credentials for allowed origin", async () => {

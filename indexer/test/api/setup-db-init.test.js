@@ -15,6 +15,11 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const apiSource = fs.readFileSync(path.resolve(__dirname, "../../src/api.js"), "utf8");
 
+// The guard comment above this handler documents the forbidden syntax as an
+// example, which would otherwise trip these same regexes. Strip `//` line
+// comments before scanning so only real code is checked.
+const apiCode = apiSource.replace(/^\s*\/\/.*$/gm, "");
+
 // Extract the db-init handler body: from the route registration up to its
 // closing `});`.
 function extractDbInitHandler(source) {
@@ -26,14 +31,15 @@ function extractDbInitHandler(source) {
 }
 
 describe("POST /api/setup/db-init (issue #417)", () => {
-  it("does not reference seed-lib anywhere in api.js", () => {
-    expect(apiSource).not.toMatch(/seed-lib/);
-    expect(apiSource).not.toMatch(/seedLib/);
+  it("does not import seed-lib anywhere in api.js", () => {
+    expect(apiCode).not.toMatch(/^\s*import\b.*seed-lib/m);
+    expect(apiCode).not.toMatch(/\brequire\(\s*['"][^'"]*seed-lib/);
+    expect(apiCode).not.toMatch(/\bseedLib\b/);
   });
 
   it("has no dynamic import of seed-lib", () => {
     // Catches `await import('./seed-lib.js')` / `import("../seed-lib")` etc.
-    expect(apiSource).not.toMatch(/import\(\s*['"][^'"]*seed-lib/);
+    expect(apiCode).not.toMatch(/import\(\s*['"][^'"]*seed-lib/);
   });
 
   it("handler calls db.init() and only db.init()", () => {

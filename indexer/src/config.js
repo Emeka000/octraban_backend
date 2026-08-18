@@ -271,7 +271,7 @@ try {
   console.error("Invalid environment variables detected. Please fix the following issues:\n");
   
   if (error instanceof z.ZodError) {
-    error.errors.forEach((err, index) => {
+    error.issues.forEach((err, index) => {
       const path = err.path.join(".");
       const envVar = path || "unknown";
       const message = err.message;

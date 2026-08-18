@@ -165,18 +165,26 @@ describe("wsEvents — broadcast to connected clients", () => {
     // Wait a tick for the close event to propagate and the bus listener to be removed
     await new Promise((r) => setTimeout(r, 50));
 
-    // Publishing after D disconnected must not throw
-    expect(() =>
-      publish({
-        seq: 5,
-        contract_id: "CCLEAN",
-        function: "transfer",
-        ledger: 3,
-        description: "post-disconnect publish",
-        raw_topics: [],
-        raw_data: "",
-      }),
-    ).not.toThrow();
+    // Publishing after D disconnected must not throw, and must still reach the
+    // still-connected clients (drain it here so it doesn't leak into the next test).
+    const [msgA, msgB] = await Promise.all([
+      nextMessage(clientA),
+      nextMessage(clientB),
+      Promise.resolve().then(() =>
+        publish({
+          seq: 5,
+          contract_id: "CCLEAN",
+          function: "transfer",
+          ledger: 3,
+          description: "post-disconnect publish",
+          raw_topics: [],
+          raw_data: "",
+        }),
+      ),
+    ]);
+
+    expect(msgA.data.seq).toBe(5);
+    expect(msgB.data.seq).toBe(5);
   });
 
   it("publishTransactionStatus is broadcast via the transaction_status channel", async () => {
