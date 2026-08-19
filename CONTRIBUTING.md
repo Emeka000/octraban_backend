@@ -178,6 +178,54 @@ The Octraban includes a robust CAP-0077 Consensus Asset-Freeze transaction inter
 - **Scanner (`src/indexer/freeze-scanner.ts`)**: In real-time, extracts the read/write footprint of transactions and checks against the in-memory cache of frozen keys. Critical violations trigger webhooks.
 - **API (`src/api/freeze.ts`)**: Provides complete CRUD and aggregation operations for keys, violations, and audit logs.
 
+## Indexer Type Checking
+
+`indexer/` (the JS service the frontend actually talks to — see the
+[two-service architecture](./README.md#two-service-architecture-api-on-3000-vs-indexer-on-3001)
+in the README) predates the root API's TypeScript rewrite and is still plain
+`.js`. Rather than a big-bang rewrite to `.ts`, it's being brought under type
+checking incrementally using TypeScript's `checkJs` mode against JSDoc
+annotations, so files gain type safety as they're touched instead of all at
+once.
+
+**How it's wired:**
+
+- `indexer/tsconfig.json` sets `allowJs: true`, `checkJs: false` at the
+  project level, `strict: true`, and `include`s all of `indexer/src`.
+- Individual files opt in by adding `// @ts-check` as their first line. Only
+  files with that pragma are type-checked; everything else is parsed (so
+  checked files still get real inferred types when they import unchecked
+  ones) but not diagnosed. This is the standard incremental-JS-migration
+  pattern and means turning on checking for a new file never blocks on fixing
+  every other file first.
+- `useUnknownInCatchVariables` is turned off project-wide: the whole codebase
+  uses `catch (e) { ... e.message ... }` as its error-handling idiom (see
+  `asyncHandler` above), and narrowing `unknown` in every one of those blocks
+  would be high-churn busywork with no real safety benefit.
+- `npm run typecheck` (inside `indexer/`) runs `tsc -p tsconfig.json --noEmit`
+  and must exit 0. It runs in CI as the **Indexer Type Check** job.
+
+**Currently checked** (the highest-risk modules — request/response boundary,
+config validation, and the DB layer the decoder writes through):
+`decoder.js`, `decoderValidator.js`, `eventInserter.js`, `config.js`,
+`api.js`, `db.js`.
+
+**Migration plan for the rest of `indexer/src`:** when you touch a `.js` file
+in the indexer, consider adding `// @ts-check` to it as part of that PR:
+
+1. Add `// @ts-check` as the file's first line.
+2. Run `npm run typecheck` from `indexer/` and fix what surfaces — mostly
+   missing `@param`/`@returns` JSDoc on function signatures.
+3. Where a value is genuinely dynamic (raw XDR/RPC payloads, `pg` query rows)
+   prefer a narrow local type or an explicit `any`/`unknown` cast over
+   fighting the type system — see `SorobanRpcEvent` and `DecodedEvent` in
+   `decoder.js` for the pattern used for the RPC event shape.
+4. Send it as its own PR (or a clearly separated commit) so a type-checking
+   pass doesn't get tangled up with unrelated behavioral changes.
+
+There's no fixed deadline for finishing the migration; the goal is that the
+checked surface only grows over time, never shrinks.
+
 ## Questions?
 
 Open a GitHub Discussion or ask in the [Stellar Discord](https://discord.gg/stellardev).

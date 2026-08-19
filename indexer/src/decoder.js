@@ -1,3 +1,4 @@
+// @ts-check
 import { scValToNative } from "@stellar/stellar-sdk";
 import { db } from "./db.js";
 import { detectSac, detectSacAsset } from "./sac.js";
@@ -6,6 +7,58 @@ import { decodeRwaEvent } from "./rwaDecoder.js";
 import { parseHeuristic } from "./heuristicParser.js";
 import { parseTTLHostFunction, formatTTLExtension } from "./ttlExtensionParser.js";
 import { parseZkHostFunctions, computeZkCostDelta } from "./zkHostFunctions.js";
+
+/**
+ * Raw Soroban RPC event as received from the RPC poller. The `txMeta` field
+ * carries an XDR `TransactionMeta` object whose shape depends on the protocol
+ * version, so it — and other RPC-specific fields — are left loosely typed
+ * rather than fully modeled against the XDR type definitions.
+ * @typedef {object} SorobanRpcEvent
+ * @property {string} contractId
+ * @property {any[]} topic
+ * @property {any} value
+ * @property {number} ledger
+ * @property {string} txHash
+ * @property {string} [txResultCode]
+ * @property {string} [resultCode]
+ * @property {{ code?: string }} [result]
+ * @property {string | number} [feeCharged]
+ * @property {any} [txMeta]
+ * @property {any} [hostFunction]
+ * @property {any} [host_function]
+ * @property {any} [operation]
+ */
+
+/**
+ * The decoded event as produced by `decode()`. Downstream pipeline stages
+ * (bloat/footprint/fee-bump/archival/upgrade detectors — outside this file)
+ * enrich the object with additional optional fields before it reaches
+ * `db.upsertEvent`, so those are modeled here too.
+ * @typedef {object} DecodedEvent
+ * @property {string} contract_id
+ * @property {string} function
+ * @property {number} ledger
+ * @property {string} tx_hash
+ * @property {string | null} description
+ * @property {string[]} raw_topics
+ * @property {string} raw_data
+ * @property {string} [sac_asset]
+ * @property {boolean} [is_clawback]
+ * @property {boolean} [is_resource_limit_exceeded]
+ * @property {number} [cpu_instructions]
+ * @property {number} [mem_bytes]
+ * @property {number} [fee_charged]
+ * @property {unknown} [heuristic_params]
+ * @property {unknown} [ttl_extension]
+ * @property {boolean} [is_high_bloat_risk]
+ * @property {unknown} [upgrade]
+ * @property {unknown} [storage_tiers]
+ * @property {boolean} [footprint_contention]
+ * @property {unknown} [fee_bump]
+ * @property {unknown} [archival_info]
+ * @property {unknown} [zk_host_calls]
+ * @property {boolean} [decoded]
+ */
 
 // Result codes that indicate the block compute budget was exhausted.
 const RESOURCE_LIMIT_CODES = new Set([
@@ -17,7 +70,7 @@ const RESOURCE_LIMIT_CODES = new Set([
 /**
  * Returns true when the transaction was dropped because the block's total
  * resource budget was full.
- * @param {object} ev  Raw Soroban RPC event
+ * @param {SorobanRpcEvent} ev  Raw Soroban RPC event
  */
 function isResourceLimitExceeded(ev) {
   const code = ev.txResultCode ?? ev.resultCode ?? ev.result?.code ?? "";
@@ -35,10 +88,11 @@ function isResourceLimitExceeded(ev) {
  *   fee_charged      — SorobanTransactionMeta.ext.v1.totalRefundableResourceFeeCharged
  *   mem_bytes        — SorobanTransactionMeta.ext.v1.rentFeeCharged (rent ∝ memory)
  *
- * @param {object} ev  Raw Soroban RPC event
+ * @param {SorobanRpcEvent} ev  Raw Soroban RPC event
  * @returns {{ cpu_instructions?: number, mem_bytes?: number, fee_charged?: number }}
  */
 function extractGasCosts(ev) {
+  /** @type {{ cpu_instructions?: number, mem_bytes?: number, fee_charged?: number }} */
   const result = {};
 
   try {
@@ -87,6 +141,8 @@ const NATIVE_SAC_IDS = new Set([
 /**
  * Decode a raw Soroban RPC event into a human-readable record.
  * Uses the ABI template when available; falls back to a generic description.
+ * @param {SorobanRpcEvent} ev
+ * @returns {Promise<DecodedEvent>}
  */
 export async function decode(ev) {
   const contractId = ev.contractId;
@@ -118,7 +174,7 @@ export async function decode(ev) {
   const meta = await db
     .getContractMetaByLedger(contractId, ev.ledger)
     .catch(() => null) ?? await db.getContractMeta(contractId).catch(() => null);
-  const fnAbi = meta?.functions?.find((f) => f.name === fnName);
+  const fnAbi = meta?.functions?.find((/** @type {any} */ f) => f.name === fnName);
 
   // Check if this contract is a registered vault
   const vaultMeta = await db.getVault(contractId).catch(() => null);
@@ -156,7 +212,7 @@ export async function decode(ev) {
   const heuristicParams =
     !fnAbi && !vaultMeta && !meta ? parseHeuristic([...topics.slice(1), ...(data != null ? [data] : [])]) : undefined;
 
-  const decoded = {
+  const decoded = /** @type {DecodedEvent} */ ({
     contract_id: contractId,
     function: fnName,
     ledger: ev.ledger,
@@ -169,7 +225,7 @@ export async function decode(ev) {
     is_resource_limit_exceeded: isResourceLimitExceeded(ev),
     ...extractGasCosts(ev),
     ...(heuristicParams && { heuristic_params: heuristicParams }),
-  };
+  });
 
   // Protocol 26: detect TTL extension host function calls on this event
   const ttlExt = parseTTLHostFunction(ev.hostFunction ?? ev.host_function ?? ev.operation ?? null);
@@ -204,6 +260,10 @@ export async function decode(ev) {
  * Returns wrap/unwrap label and description for native XLM SAC events.
  * mint on native SAC = Classic XLM → Soroban (wrap)
  * burn on native SAC = Soroban → Classic XLM (unwrap)
+ * @param {string} fnName
+ * @param {any[]} args
+ * @param {any} data
+ * @returns {{ function: string, description: string } | null}
  */
 export function nativeXlmDescription(fnName, args, data) {
   if (fnName === "mint") {
@@ -225,6 +285,14 @@ export function nativeXlmDescription(fnName, args, data) {
   return null;
 }
 
+/**
+ * @param {string} fn
+ * @param {any[]} args
+ * @param {any} data
+ * @param {string} contractName
+ * @param {{ name?: string, underlying_asset?: string }} vaultMeta
+ * @returns {string}
+ */
 function vaultDescription(fn, args, data, contractName, vaultMeta) {
   const assetLabel = vaultMeta.underlying_asset
     ? `asset ${vaultMeta.underlying_asset.slice(0, 6)}…${vaultMeta.underlying_asset.slice(-4)}`
@@ -253,6 +321,11 @@ function vaultDescription(fn, args, data, contractName, vaultMeta) {
  * SEP-41 transfer format:
  *   "Address {short-from} transferred {amount} {token} to {short-to} on {contractName}"
  * where short addresses are truncated to "AAAAAA…ZZZZ" (6 + 4 chars).
+ * @param {string} fn
+ * @param {any[]} args
+ * @param {any} data
+ * @param {string} contractName
+ * @returns {string}
  */
 export function buildDescription(fn, args, data, contractName) {
   switch (fn) {
@@ -281,16 +354,25 @@ export function buildDescription(fn, args, data, contractName) {
   }
 }
 
+/**
+ * @param {string} fn
+ * @param {any[]} args
+ * @param {any} data
+ * @param {string} contractId
+ * @returns {string}
+ */
 function genericDescription(fn, args, data, contractId) {
   const argStr = args.map(String).join(", ");
   return `${fn}(${argStr}) called on ${contractId}`;
 }
 
+/** @param {any} addr */
 function fmt(addr) {
   if (typeof addr !== "string" || addr.length < 10) return String(addr);
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
+/** @param {any} amount */
 function fmtXlm(amount) {
   if (amount == null) return "?";
   // SAC amounts are in stroops (1 XLM = 10_000_000 stroops)

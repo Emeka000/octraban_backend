@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "strict": true,
+    // The codebase's established error-handling idiom is `catch (e) { ... e.message }`
+    // everywhere (see CONTRIBUTING.md's asyncHandler convention). Rewriting every
+    // catch block to narrow `unknown` would be pure churn with no safety benefit
+    // here, since these are all terminal error-response handlers.
+    "useUnknownInCatchVariables": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true
+  },
+  "include": ["src/**/*.js", "src/**/*.ts"],
+  "exclude": ["node_modules", "coverage", "dist"]
+}

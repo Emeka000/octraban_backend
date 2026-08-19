@@ -188,6 +188,11 @@ interchangeable — new contributors should read this section before deciding wh
 > service on `:3000`. `src/index.ts` is a second, largely independent API — running it is
 > optional for a working explorer UI, but the two processes share the same Postgres database.
 
+The indexer is still plain JavaScript, unlike the root API's TypeScript. It's being brought
+under type checking incrementally (`npm run typecheck` in `indexer/`, wired into CI) — see
+[Indexer Type Checking](./CONTRIBUTING.md#indexer-type-checking) in CONTRIBUTING.md for the
+approach and which modules are covered so far.
+
 ### Data flow
 
 ```

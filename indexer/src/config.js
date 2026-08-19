@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Environment Configuration Validation
  *
@@ -15,6 +16,7 @@
 import { z } from "zod";
 
 // ── Helper: Positive integer with default ─────────────────────────────────────
+/** @param {number} defaultValue */
 const positiveInt = (defaultValue) =>
   z
     .string()
@@ -25,6 +27,7 @@ const positiveInt = (defaultValue) =>
     });
 
 // ── Helper: Non-negative integer with default ─────────────────────────────────
+/** @param {number} defaultValue */
 const nonNegativeInt = (defaultValue) =>
   z
     .string()
@@ -35,6 +38,7 @@ const nonNegativeInt = (defaultValue) =>
     });
 
 // ── Helper: Positive number (float) with default ──────────────────────────────
+/** @param {number} defaultValue */
 const positiveNumber = (defaultValue) =>
   z
     .string()
@@ -66,6 +70,7 @@ const commaSeparatedList = () =>
     .transform((val) => (val ? val.split(",").map((s) => s.trim()).filter(Boolean) : []));
 
 // ── Helper: Boolean with default ──────────────────────────────────────────────
+/** @param {boolean} defaultValue */
 const booleanWithDefault = (defaultValue) =>
   z
     .string()
@@ -76,6 +81,7 @@ const booleanWithDefault = (defaultValue) =>
     });
 
 // ── Helper: Cron expression validation ───────────────────────────────────────
+/** @param {string} defaultValue */
 const cronExpression = (defaultValue) =>
   z
     .string()

@@ -1,15 +1,26 @@
+// @ts-check
 import Ajv from "ajv";
 import addFormats from "ajv-formats";
 import schema from "./decodedEvent.schema.json" with { type: "json" };
 import { decoderSchemaViolationsTotal } from "./metrics.js";
 
-const ajv = new Ajv({ allErrors: true, strict: false });
-addFormats(ajv);
+// ajv/ajv-formats ship a hybrid CJS/ESM default export that resolves correctly
+// at runtime (verified: `import(...).then(m => m.default)` is the class/function)
+// but confuses `tsc`'s NodeNext interop typing for this package shape — cast
+// locally rather than loosen the whole file's checking.
+const AjvClass = /** @type {any} */ (Ajv);
+const addFormatsFn = /** @type {any} */ (addFormats);
+const ajv = new AjvClass({ allErrors: true, strict: false });
+addFormatsFn(ajv);
 const validate = ajv.compile(schema);
 
 const INVALID_HTML_OR_CONTROL = /[\u0000-\u001F\u007F-\u009F]/g;
 const HTML_TAGS = /<[^>]*>/g;
 
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
 export function sanitizeDecodedText(value) {
   if (value == null) return "";
   let sanitized = String(value);
@@ -20,10 +31,14 @@ export function sanitizeDecodedText(value) {
   return sanitized;
 }
 
+/**
+ * @param {unknown} decoded
+ * @returns {{ valid: boolean, errors: Array<{ message?: string, instancePath: string, schemaPath: string, params: unknown }> }}
+ */
 export function validateDecodedEvent(decoded) {
   const valid = validate(decoded);
   if (valid) return { valid: true, errors: [] };
-  const errors = (validate.errors || []).map((err) => ({
+  const errors = (validate.errors || []).map((/** @type {any} */ err) => ({
     message: err.message,
     instancePath: err.instancePath,
     schemaPath: err.schemaPath,
@@ -46,9 +61,9 @@ export function validateDecodedEvent(decoded) {
  * On validation failure, sanitizes the description, sets decoded=false,
  * and logs structured error information.
  *
- * @param {object} decoded - The decoded event object from decoder
- * @param {object} logger - Logger instance (optional, falls back to console)
- * @returns {object} The validated/sanitized decoded object with a decoded flag
+ * @param {import('./decoder.js').DecodedEvent} decoded - The decoded event object from decoder
+ * @param {{ error: (...args: any[]) => void }} [logger] - Logger instance (optional, falls back to console)
+ * @returns {import('./decoder.js').DecodedEvent} The validated/sanitized decoded object with a decoded flag
  */
 export function validateAndSanitizeDecodedEvent(decoded, logger = console) {
   // Always sanitize the description field to prevent corruption
