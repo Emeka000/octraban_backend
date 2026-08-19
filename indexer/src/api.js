@@ -1,3 +1,4 @@
+// @ts-check
 import express from "express";
 import http from "http";
 import path from "path";
@@ -45,13 +46,15 @@ import { formatAmount } from "./formatAmount.js";
 import { getHealthStatus, getLivenessStatus, getReadinessStatus } from "./health.js";
 import { randomUUID } from "crypto";
 
+/** @param {any} req @param {any} _res @param {express.NextFunction} next */
 function requestIdMiddleware(req, _res, next) {
   req.id = req.headers["x-request-id"] || randomUUID();
   next();
 }
 
+/** @param {any} _logDestination */
 function createHttpLogger(_logDestination) {
-  return (req, res, next) => {
+  return (/** @type {any} */ req, /** @type {any} */ res, /** @type {express.NextFunction} */ next) => {
     res.on("finish", () => {
       console.log(`[api] ${req.method} ${req.url} ${res.statusCode}`);
     });
@@ -59,6 +62,7 @@ function createHttpLogger(_logDestination) {
   };
 }
 
+/** @param {any} _req @param {any} _res @param {express.NextFunction} next */
 function metricsMiddleware(_req, _res, next) {
   next();
 }
@@ -66,6 +70,7 @@ function metricsMiddleware(_req, _res, next) {
 const PORT = process.env.PORT || 3001;
 const RPC_URL = process.env.SOROBAN_RPC_URL || "https://soroban-testnet.stellar.org";
 
+/** @param {any} req @param {any} res @param {express.NextFunction} next */
 function requireApiKey(req, res, next) {
   const apiKey = process.env.API_KEY;
   if (!apiKey) return next();
@@ -74,12 +79,24 @@ function requireApiKey(req, res, next) {
   next();
 }
 
+/**
+ * Coerce an Express query-string value (which may be a nested object or
+ * array per the `qs` parser) down to the plain string these routes expect.
+ * @param {unknown} value
+ * @returns {string | undefined}
+ */
+function qstr(value) {
+  return typeof value === "string" ? value : undefined;
+}
+
+/** @param {unknown} value */
 function parseTxHashes(value) {
   if (!value) return [];
   if (Array.isArray(value)) return value.flatMap((v) => String(v).split(",").map((hash) => hash.trim()).filter(Boolean));
   return String(value).split(",").map((hash) => hash.trim()).filter(Boolean);
 }
 
+/** @param {any} res */
 function createSseStream(res) {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -88,6 +105,10 @@ function createSseStream(res) {
   res.write("retry: 3000\n\n");
 }
 
+/**
+ * @param {any} res
+ * @param {unknown} payload
+ */
 function sendSseEvent(res, payload) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
@@ -95,8 +116,12 @@ function sendSseEvent(res, payload) {
 // ── Cache middleware factory ──────────────────────────────────────────────────
 // Creates an Express middleware that serves from L1/L2 cache on hit,
 // intercepts res.json on miss to cache the response and attach headers.
+/**
+ * @param {string} cacheType
+ * @param {(req: any) => string} getKey
+ */
 function makeCache(cacheType, getKey) {
-  return async (req, res, next) => {
+  return async (/** @type {any} */ req, /** @type {any} */ res, /** @type {express.NextFunction} */ next) => {
     const key = getKey(req);
     const start = Date.now();
 
@@ -118,7 +143,7 @@ function makeCache(cacheType, getKey) {
 
     // Miss: intercept res.json to cache the successful response
     const originalJson = res.json.bind(res);
-    res.json = (data) => {
+    res.json = (/** @type {any} */ data) => {
       if (res.statusCode >= 200 && res.statusCode < 300) {
         const computeMs = Date.now() - start;
         const etag = generateETag(data);
@@ -152,6 +177,7 @@ const writeLimiter = rateLimit({
   message: { error: "Too many requests" },
 });
 
+/** @param {{ logDestination?: any, dbOverride?: any }} [opts] */
 export function createApi({ logDestination, dbOverride } = {}) {
   const app = express();
   app.use(helmet());
@@ -162,7 +188,9 @@ export function createApi({ logDestination, dbOverride } = {}) {
       ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim())
       : [];
 
+  /** @type {import('cors').CorsOptionsDelegate<import('express').Request>} */
   const corsOptionsDelegate = (req, callback) => {
+    /** @type {import('cors').CorsOptions} */
     const corsOptions = {
       methods: ['GET', 'POST', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
@@ -297,20 +325,20 @@ export function createApi({ logDestination, dbOverride } = {}) {
       try {
         const key = `events:list:${req.query.contract ?? ""}:${req.query.fn ?? ""}:${Number(req.query.page) || 1}:${req.query.type ?? ""}`;
         const events = await db.getEvents({
-          contract: req.query.contract,
-          fn: req.query.fn,
+          contract: qstr(req.query.contract),
+          fn: qstr(req.query.fn),
           page: Number(req.query.page) || 1,
-          type: req.query.type,
+          type: qstr(req.query.type),
         });
         // Predictive pre-fetch: next page if user is paginating
         schedulePrefetch(key, {
           [`events:list:${req.query.contract ?? ""}:${req.query.fn ?? ""}:${(Number(req.query.page) || 1) + 1}:${req.query.type ?? ""}`]:
             () =>
               db.getEvents({
-                contract: req.query.contract,
-                fn: req.query.fn,
+                contract: qstr(req.query.contract),
+                fn: qstr(req.query.fn),
                 page: (Number(req.query.page) || 1) + 1,
-                type: req.query.type,
+                type: qstr(req.query.type),
               }),
         });
         res.json(events);
@@ -424,7 +452,7 @@ export function createApi({ logDestination, dbOverride } = {}) {
           });
         }
 
-        const listener = (status) => {
+        const listener = (/** @type {any} */ status) => {
           if (status.tx_hash !== txHash) return;
           sendSseEvent(res, status);
           if (status.status !== "pending") {
@@ -460,7 +488,7 @@ export function createApi({ logDestination, dbOverride } = {}) {
         });
       }
 
-      const listener = (status) => {
+      const listener = (/** @type {any} */ status) => {
         if (status.tx_hash !== txHash) return;
         sendSseEvent(res, status);
         if (status.status !== "pending") {
@@ -494,7 +522,7 @@ export function createApi({ logDestination, dbOverride } = {}) {
       const payload = {
         tx_hash: txHash,
         status,
-        ledger: txResult?.ledger ?? null,
+        ledger: /** @type {any} */ (txResult)?.ledger ?? null,
         error: extractFailureReason(txResult),
       };
       res.json(payload);
@@ -551,11 +579,11 @@ export function createApi({ logDestination, dbOverride } = {}) {
         name: meta?.name || "",
         description: meta?.description || "",
         functions: (spec || []).map((fn) => {
-          const registered = meta?.functions?.find((f) => f.name === fn.name);
+          const registered = meta?.functions?.find((/** @type {any} */ f) => f.name === fn.name);
           return {
             name: fn.name,
             description: registered?.description || "",
-            args: fn.args.map((a) => ({ name: a.name, type: a.type })),
+            args: fn.args.map((/** @type {any} */ a) => ({ name: a.name, type: a.type })),
           };
         }),
       };
@@ -677,7 +705,7 @@ export function createApi({ logDestination, dbOverride } = {}) {
       const server = new SorobanRpc.Server(rpcUrl);
 
       const contract = new Contract(contractId);
-      const scArgs = args.map((a) => nativeToScVal(a));
+      const scArgs = args.map((/** @type {any} */ a) => nativeToScVal(a));
       const op = contract.call(fn, ...scArgs);
 
       const account = await server.getAccount(
@@ -775,9 +803,12 @@ export function createApi({ logDestination, dbOverride } = {}) {
       const server = new SorobanRpc.Server(RPC_URL);
 
       const envelope = xdr.TransactionEnvelope.fromXDR(xdrEnvelope, "base64");
-      const sim = await server.simulateTransaction({
-        toEnvelope: () => envelope,
-      });
+      // simulateTransaction only calls `.toEnvelope()` on its argument at runtime,
+      // so a minimal duck-typed object works even though it isn't a real
+      // Transaction/FeeBumpTransaction instance per the SDK's stricter public type.
+      const sim = await server.simulateTransaction(
+        /** @type {any} */ ({ toEnvelope: () => envelope }),
+      );
 
       if (SorobanRpc.Api.isSimulationError(sim)) {
         return res.json({ success: false, error: sim.error });
@@ -879,9 +910,9 @@ export function createApi({ logDestination, dbOverride } = {}) {
       }
 
       const result = await db.getEventsCursor({
-        contract: req.query.contract || undefined,
-        fn: req.query.fn || undefined,
-        type: req.query.type || undefined,
+        contract: qstr(req.query.contract),
+        fn: qstr(req.query.fn),
+        type: qstr(req.query.type),
         after_seq: req.query.after ? Number(req.query.after) : 0,
         limit: req.query.limit ? Number(req.query.limit) : 25,
       });
@@ -897,7 +928,7 @@ export function createApi({ logDestination, dbOverride } = {}) {
     try {
       const { function_name, start_ledger, end_ledger, page, limit } = req.query;
       const result = await db.getContractTransactions(req.params.id, {
-        function_name: function_name || undefined,
+        function_name: qstr(function_name),
         start_ledger: start_ledger ? Number(start_ledger) : undefined,
         end_ledger: end_ledger ? Number(end_ledger) : undefined,
         page: page ? Number(page) : 1,
@@ -975,7 +1006,7 @@ export function createApi({ logDestination, dbOverride } = {}) {
   // Returns alerts flagged by burnDetector for rapid supply contraction.
   app.get("/api/burn-alerts", (req, res) => {
     try {
-      const alerts = getBurnAlerts(req.query.contract || undefined);
+      const alerts = getBurnAlerts(qstr(req.query.contract));
       res.json(alerts);
     } catch (e) {
       res.status(500).json({ error: e.message });
@@ -1014,7 +1045,7 @@ export function createApi({ logDestination, dbOverride } = {}) {
         });
       }
       await db.addSourceVerification({
-        contract_id: req.params.id,
+        contract_id: String(req.params.id),
         wasm_hash,
         signer,
         signature,
@@ -1029,7 +1060,7 @@ export function createApi({ logDestination, dbOverride } = {}) {
   // GET /api/contracts/:id/source-verifications?wasm_hash=
   app.get("/api/contracts/:id/source-verifications", async (req, res) => {
     try {
-      const rows = await db.getSourceVerifications(req.params.id, req.query.wasm_hash || undefined);
+      const rows = await db.getSourceVerifications(String(req.params.id), qstr(req.query.wasm_hash));
       res.json(rows);
     } catch (e) {
       res.status(500).json({ error: e.message });
@@ -1041,8 +1072,8 @@ export function createApi({ logDestination, dbOverride } = {}) {
   // GET /api/contracts/:id/state-diffs?key=&limit=
   app.get("/api/contracts/:id/state-diffs", async (req, res) => {
     try {
-      const rows = await db.getStateDiffs(req.params.id, {
-        key: req.query.key || undefined,
+      const rows = await db.getStateDiffs(String(req.params.id), {
+        key: qstr(req.query.key),
         limit: req.query.limit ? Math.min(Number(req.query.limit), 500) : 200,
       });
       res.json(rows);
@@ -1109,7 +1140,7 @@ export function createApi({ logDestination, dbOverride } = {}) {
   // ── Setup Wizard & Diagnostics Endpoints ────────────────────────────────────
   // These endpoints are disabled in production (NODE_ENV=production) because
   // they can write .env files and run migrations with no additional auth.
-  const blockInProduction = (_req, res, next) => {
+  const blockInProduction = (/** @type {any} */ _req, /** @type {any} */ res, /** @type {express.NextFunction} */ next) => {
     if (process.env.NODE_ENV === "production") {
       return res.status(403).json({ error: "Not available in production" });
     }
@@ -1152,7 +1183,11 @@ export function createApi({ logDestination, dbOverride } = {}) {
       }
       // Shell-escape a value so it is safe to embed in a KEY=value .env line.
       // Wraps in single-quotes and escapes any embedded single-quote characters.
-      const shellEscape = (val) => `'${String(val).replace(/'/g, "'\\''")}'`;
+      const shellEscape = (/** @type {any} */ val) => `'${String(val).replace(/'/g, "'\\''")}'`;
+      /**
+       * @param {string} key
+       * @param {any} val
+       */
       const updateEnvVar = (key, val) => {
         if (!val) return;
         const escaped = shellEscape(val);
@@ -1197,9 +1232,13 @@ export function createApi({ logDestination, dbOverride } = {}) {
 
   // ── CSV/JSON export endpoints ─────────────────────────────────
 
+  /**
+   * @param {any[]} rows
+   * @param {string[]} columns
+   */
   function rowsToCsv(rows, columns) {
     if (!rows.length) return columns.join(",") + "\n";
-    const escape = (v) => {
+    const escape = (/** @type {any} */ v) => {
       if (v == null) return "";
       const s = String(v);
       return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
@@ -1241,9 +1280,9 @@ export function createApi({ logDestination, dbOverride } = {}) {
       const format = req.query.format === "json" ? "json" : "csv";
       const limit = Math.min(Number(req.query.limit) || 10000, 10000);
       const rows = await db.getEventsForExport({
-        contract: req.query.contract,
-        fn: req.query.fn,
-        type: req.query.type,
+        contract: qstr(req.query.contract),
+        fn: qstr(req.query.fn),
+        type: qstr(req.query.type),
         limit,
       });
       if (format === "json") {
@@ -1337,6 +1376,7 @@ export function createApi({ logDestination, dbOverride } = {}) {
           try {
             const method = String(item?.method || "GET").toUpperCase();
             const subPath = item?.path || item?.url || "/";
+            /** @type {{ method: string, headers: Record<string, any>, body?: string }} */
             const init = { method, headers: {} };
             if (apiKey) init.headers["x-api-key"] = apiKey;
             if (item?.body !== undefined && method !== "GET" && method !== "HEAD") {
@@ -1412,7 +1452,7 @@ export function createApi({ logDestination, dbOverride } = {}) {
       const originalGas = batch.summarizeGas(estimates);
       const optimizedGas = optimizedOrder
         .map((id) => estimates.find((estimate) => estimate.callId === id))
-        .filter(Boolean)
+        .filter((estimate) => estimate !== undefined)
         .reduce(
           (acc, estimate) => ({
             cpuInsns: acc.cpuInsns + (estimate.cpuInsns || 0),
