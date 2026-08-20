@@ -36,6 +36,18 @@ npm run dev
 npm run index
 ```
 
+This repo has two independent migration systems (Prisma for the API, a SQL runner for the
+indexer) sharing one database. `npx prisma migrate dev` above only applies the Prisma side —
+the indexer applies its own migrations automatically on startup. To bring a **fresh** database
+to a working state for both in one step (e.g. in CI, or scripting a new environment), use:
+
+```bash
+DATABASE_URL=<your-db-url> npm run db:bringup
+```
+
+See [docs/database-ownership.md](./docs/database-ownership.md) for which tables each system
+owns and why they're split this way.
+
 ### Running tests
 ```bash
 npm test

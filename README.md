@@ -193,6 +193,12 @@ under type checking incrementally (`npm run typecheck` in `indexer/`, wired into
 [Indexer Type Checking](./CONTRIBUTING.md#indexer-type-checking) in CONTRIBUTING.md for the
 approach and which modules are covered so far.
 
+Both processes migrate the same database with two independent migration systems (Prisma for
+the API, a small SQL runner for the indexer). See
+[docs/database-ownership.md](./docs/database-ownership.md) for which tables each one owns and
+for `npm run db:bringup`, the single command that brings a fresh database to a working state
+for both.
+
 ### Data flow
 
 ```
