@@ -24,7 +24,7 @@ at once. This document is the source of truth for that boundary.
 ## Decision: enforce a boundary, don't consolidate
 
 Consolidating onto a single migration system was considered and rejected for
-this change: the Prisma schema has ~190 models backing the API/GraphQL/billing
+this change: the Prisma schema has 218 models backing the API/GraphQL/billing
 surface, and the indexer's raw-SQL tables are written and read through
 hand-tuned queries (full-text search, keyset pagination, partitioned audit
 tables) that don't map cleanly onto Prisma's query builder. A rewrite of either
@@ -34,11 +34,35 @@ Instead, this change **documents and enforces a non-overlapping table
 boundary**: each system owns a fixed, disjoint set of tables in the same
 database, and neither may create a table the other owns.
 
+## Prisma migration history was rebaselined
+
+Auditing "which tables does Prisma own" against `prisma/migrations/` surfaced
+that fresh bring-up on the Prisma side had never actually worked: the
+previous 17 migrations only ever created 68 of the 218 tables now in
+`prisma/schema.prisma` (everything else, including base models like
+`Ledger`, `Contract`, `Transaction`, and `Event`, had no migration at all),
+and roughly half of the 68 they did create used table names that no longer
+match their models after later refactors (e.g. a migration created
+`"emergency_states"`, but the current `EmergencyState` model has no
+`@@map`, so Prisma expects `"EmergencyState"`). Given `docker-compose.yml`
+runs `prisma migrate deploy` as its production start command, this means a
+genuinely fresh deployment of the checked-in migrations would already have
+been broken before this change, unrelated to indexer ownership.
+
+This change replaces those 17 fragmented, partially-stale migrations with a
+single baseline migration (`prisma/migrations/20260617000000_baseline_schema/`)
+generated directly from `prisma/schema.prisma` via
+`npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script`,
+so the migration history matches the schema exactly (verified 1:1: 218
+`CREATE TABLE` statements, 7 `CREATE TYPE` statements) instead of by hand.
+Going forward, treat this migration like any other Prisma migration — don't
+edit it — and generate new ones with `prisma migrate dev` as usual.
+
 ## Table ownership
 
 ### Prisma-owned (source of truth: `prisma/schema.prisma`)
 
-Every model in `prisma/schema.prisma` — all ~190 of them — is Prisma-owned.
+Every model in `prisma/schema.prisma` — all 218 of them — is Prisma-owned.
 Models without an explicit `@@map(...)` get their physical table named after
 the model itself (e.g. `Contract`, `Event`, `Ledger`, `Transaction`), which
 Prisma always double-quotes, making them case-sensitive identifiers distinct
