@@ -174,6 +174,31 @@ A CI check (`npm run check:mock-gating`) fails the build if a new endpoint under
 `src/api/` mentions "mock" without importing the shared framework, so new
 fabricated-data endpoints can't ship ungated.
 
+## OpenTelemetry Tracing
+
+Tracing is **off by default** and never starts unless you explicitly enable it.
+A missing or unreachable collector is handled gracefully — it logs a warning and
+the service continues without tracing.
+
+| Variable          | Default                    | Description                                                                                   |
+| ----------------- | -------------------------- | --------------------------------------------------------------------------------------------- |
+| `TRACING_ENABLED` | _(unset — tracing is off)_ | Set to `true` or `1` to start the OpenTelemetry SDK                                          |
+| `OTLP_ENDPOINT`   | `http://localhost:4318`    | OTLP collector base URL. Setting this variable alone also enables tracing.                    |
+| `SERVICE_NAME`    | `octraban`                 | Service name reported in traces                                                               |
+
+### Quick start (local collector)
+
+```bash
+# Start a local Jaeger all-in-one (OTLP HTTP on :4318)
+docker run -d -p 16686:16686 -p 4318:4318 jaegertracing/all-in-one:latest
+
+# Enable tracing in your .env
+TRACING_ENABLED=true
+OTLP_ENDPOINT=http://localhost:4318
+```
+
+Spans are flushed cleanly on `SIGTERM` and `SIGINT`.
+
 ## Mainnet Config
 
 ```env
