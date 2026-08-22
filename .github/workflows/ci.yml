@@ -54,6 +54,9 @@ jobs:
       - name: Type-check (scripts)
         run: npm run typecheck:scripts
 
+      - name: Mock/experimental data gating check
+        run: npm run check:mock-gating
+
   test:
     name: Test
     runs-on: ubuntu-latest

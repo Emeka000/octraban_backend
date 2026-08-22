@@ -7,6 +7,7 @@
  */
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import { sendMockGated } from '../config/mockData';
 
 export const oracleFeedsRouter = Router();
 
@@ -81,9 +82,10 @@ oracleFeedsRouter.get('/assets', (_req: Request, res: Response) => {
  *         example: XLM-USD
  *     responses:
  *       200:
- *         description: Current price
+ *         description: Current price (only when MOCK_DATA=true — see x-experimental)
  *       404:
- *         description: Asset pair not supported
+ *         description: Asset pair not supported, or mock data is disabled (default)
+ *     x-experimental: true
  */
 oracleFeedsRouter.get('/assets/:assetPair/price', (req: Request, res: Response) => {
   const assetPair = req.params.assetPair.toUpperCase().replace('-', '/');
@@ -95,22 +97,27 @@ oracleFeedsRouter.get('/assets/:assetPair/price', (req: Request, res: Response) 
       .json({ error: `Asset pair ${assetPair} not supported. Supported: ${supported.join(', ')}` });
   }
 
-  const mockPrices: Record<string, number> = {
+  const demoPrices: Record<string, number> = {
     'XLM/USD': 0.12,
     'BTC/USD': 65000,
     'ETH/USD': 3500,
     'USDC/USD': 1.0,
   };
 
-  res.json({
-    pair: assetPair,
-    price: mockPrices[assetPair],
-    currency: 'USD',
-    source: 'aggregated',
-    confidence: 0.99,
-    timestamp: new Date().toISOString(),
-    note: 'Demo price. Connect oracle providers for live data.',
-  });
+  return sendMockGated(
+    res,
+    {
+      pair: assetPair,
+      price: demoPrices[assetPair],
+      currency: 'USD',
+      source: 'aggregated',
+      confidence: 0.99,
+      timestamp: new Date().toISOString(),
+    },
+    {
+      disabledMessage: `No live oracle provider is connected for ${assetPair}. Set MOCK_DATA=true to receive a labeled demo price for local development.`,
+    },
+  );
 });
 
 // ── GET /assets/:assetPair/history ─────────────────────────────────────────────
