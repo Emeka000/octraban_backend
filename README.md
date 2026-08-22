@@ -144,6 +144,35 @@ Because the server caches keys, a typical rotation involves:
 | `INDEXER_POLL_INTERVAL_MS` | `5000`          | Polling interval              |
 | `INDEXER_BATCH_SIZE`       | `100`           | Ledgers per batch             |
 | `ADMIN_SECRET`             | —               | Bearer token required by every `/api/admin/*` route (indexer). See [`docs/ADMIN_AUTH.md`](./docs/ADMIN_AUTH.md). |
+| `MOCK_DATA`                | `false`         | Gates experimental endpoints that fabricate demo data instead of a real integration. See [Experimental & Mock Data](#experimental--mock-data). `ENABLE_EXPERIMENTAL` is accepted as an alias. |
+
+## Experimental & Mock Data
+
+A handful of endpoints have no real upstream integration yet (no oracle/bridge
+connection, no ZK-proof verifier, no real export pipeline) and would otherwise
+have to fabricate the data they return. Those endpoints are gated behind the
+shared framework in [`src/config/mockData.ts`](./src/config/mockData.ts):
+
+- **Off by default** — the endpoint responds `404` with `{ "error": "...", "mock": true }`
+  instead of returning synthetic data.
+- **`MOCK_DATA=true`** (or `ENABLE_EXPERIMENTAL=true`) — the endpoint returns its
+  demo/simulated response, always annotated with `"mock": true` so no consumer can
+  mistake it for real data.
+
+Currently gated endpoints:
+
+| Endpoint | Why it's gated |
+| --- | --- |
+| `GET /oracle-feeds/assets/:assetPair/price` | No live oracle provider is connected; price is a static demo value. |
+| `GET /arbitrage/cross-chain/opportunities`, `GET /arbitrage/cross-chain/bridges` | No live cross-chain oracle/bridge integration; prices and bridge status are static demo data. |
+| `POST /arbitrage/bot/deploy`, `GET/POST /arbitrage/bot/:address/*` | Simulated bot execution — no real capital or trades, PnL drifts randomly for demonstration. |
+| `GET /data-market/prices/history` | No real price-history time series exists yet; the series is synthetically generated. |
+| `POST /data-market/challenge/zk-proof`, `POST /data-market/challenge/:id/verify` (zk_proof challenges) | Real zk-SNARK verification isn't implemented; outside `MOCK_DATA` mode these always fail rather than falsely report a proof as valid. |
+| `POST /feed/backfill` (via `GET /feed/backfill/:requestId`) | Historical export generation isn't implemented against a real storage backend; outside `MOCK_DATA` mode the request fails with a clear `errorMessage` instead of returning a fake download URL. |
+
+A CI check (`npm run check:mock-gating`) fails the build if a new endpoint under
+`src/api/` mentions "mock" without importing the shared framework, so new
+fabricated-data endpoints can't ship ungated.
 
 ## Mainnet Config
 

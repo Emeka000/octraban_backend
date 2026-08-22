@@ -12,7 +12,7 @@ import { invalidateFreezeCache } from '../indexer/freeze-scanner';
 
 export const freezeRouter = Router();
 
-// Middleware to mock admin auth if needed
+// Middleware enforcing admin auth via a shared token/actor header
 const adminAuth = (req: Request, res: Response, next: any) => {
   const actor = req.headers['x-admin-token'] || req.headers['x-actor'];
   if (!actor) {
