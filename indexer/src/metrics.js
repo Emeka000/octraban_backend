@@ -63,6 +63,20 @@ export const decoderSchemaViolationsTotal = new Counter({
 });
 
 /**
+ * Events the decoder could not attribute to a recognised function — it fell
+ * back to function: "unknown" and raw_topics only. A rising rate means a
+ * growing share of events are going through with no human-readable
+ * description (unregistered ABI, unrecognised event signature, or a decoder
+ * regression) and should be investigated.
+ */
+export const decodeFallbackTotal = new Counter({
+  name: "soroban_decode_fallback_total",
+  help: "Total events that fell back to unrecognized (function: unknown) decoding, by contract",
+  labelNames: ["contract_id"],
+  registers: [registry],
+});
+
+/**
  * Update DB pool gauges from a pg.Pool instance.
  * Call this periodically (e.g. every 15 s).
  * @param {import('pg').Pool} pool

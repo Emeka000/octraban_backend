@@ -85,6 +85,12 @@ npm run index         # start indexer (separate terminal)
 | GET    | `/api/v1/tokens/:address/transfers`     | Token transfer history                                      |
 | GET    | `/health`                               | Health check                                                |
 
+## Decode Fallback Metric
+
+The indexer's `GET /metrics` (Prometheus registry defined in [`indexer/src/metrics.js`](./indexer/src/metrics.js)) exposes `soroban_decode_fallback_total{contract_id="..."}`: a counter of events the decoder could not attribute to a recognised function — it fell back to `function: "unknown"` and returned only `raw_topics`. Each occurrence also emits a structured debug log (`component: "decoder"`, `event: "decode_fallback"`, with `contract_id`, `ledger`, `tx_hash`) for sampling.
+
+A rising fallback rate means a growing share of on-chain activity is going through with no human-readable description — typically an unregistered contract ABI, an unrecognised event signature, or a decoder regression — and should be investigated before it silently erodes the product's core value (human-readable event descriptions).
+
 ## Registering a Contract ABI
 
 ```bash

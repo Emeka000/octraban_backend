@@ -7,6 +7,7 @@ import { decodeRwaEvent } from "./rwaDecoder.js";
 import { parseHeuristic } from "./heuristicParser.js";
 import { parseTTLHostFunction, formatTTLExtension } from "./ttlExtensionParser.js";
 import { parseZkHostFunctions, computeZkCostDelta } from "./zkHostFunctions.js";
+import { decodeFallbackTotal } from "./metrics.js";
 
 /**
  * Raw Soroban RPC event as received from the RPC poller. The `txMeta` field
@@ -138,6 +139,31 @@ const NATIVE_SAC_IDS = new Set([
   "CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA", // mainnet
 ]);
 
+/** @param {string} fnName */
+export function isDecodeFallback(fnName) {
+  return fnName === "unknown";
+}
+
+/**
+ * Record a decode fallback: increments the Prometheus counter (labeled by
+ * contract) and emits a structured debug log for sampling/investigation.
+ * @param {string} contractId
+ * @param {{ ledger?: number, txHash?: string }} ev
+ * @param {{ debug: (...args: any[]) => void }} [logger]
+ */
+export function recordDecodeFallback(contractId, ev, logger = console) {
+  decodeFallbackTotal.inc({ contract_id: contractId });
+  logger.debug(
+    JSON.stringify({
+      component: "decoder",
+      event: "decode_fallback",
+      contract_id: contractId,
+      ledger: ev.ledger,
+      tx_hash: ev.txHash,
+    }),
+  );
+}
+
 /**
  * Decode a raw Soroban RPC event into a human-readable record.
  * Uses the ABI template when available; falls back to a generic description.
@@ -151,6 +177,9 @@ export async function decode(ev) {
 
   // First topic is typically the function name symbol
   const fnName = typeof topics[0] === "symbol" || typeof topics[0] === "string" ? String(topics[0]) : "unknown";
+  if (isDecodeFallback(fnName)) {
+    recordDecodeFallback(contractId, ev);
+  }
 
   // Detect native XLM wrap/unwrap on the SAC contract
   if (NATIVE_SAC_IDS.has(contractId)) {

@@ -7,6 +7,7 @@
     "dev": "node --watch src/index.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand test/api/*.test.js",
     "test:decoder": "node --test tests/decoder.test.js",
+    "test:decode-fallback": "node --test tests/decodeFallback.test.js",
     "test:decoder-parity": "node --test tests/decoder-parity.test.js",
     "test:scval": "node --test tests/scval.test.js",
     "test:coverage": "node --experimental-test-coverage --test-coverage-include=src/scval.js --test-coverage-include=src/xdr_decoder.js --test-coverage-include=src/int128.js --test-coverage-lines=88 --test-coverage-branches=70 --test-coverage-functions=88 --test tests/decoder.test.js tests/decoder-parity.test.js tests/scval.test.js",
