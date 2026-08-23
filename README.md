@@ -84,6 +84,14 @@ npm run index         # start indexer (separate terminal)
 | GET    | `/api/v1/tokens/:address`               | Token detail                                                |
 | GET    | `/api/v1/tokens/:address/transfers`     | Token transfer history                                      |
 | GET    | `/health`                               | Health check                                                |
+| GET    | `/metrics`                              | Prometheus scrape endpoint (see [Metrics](#metrics))        |
+
+## Metrics
+
+Both services expose a Prometheus-format scrape endpoint backed by a shared `prom-client` `Registry`, including default Node.js process metrics (CPU, memory, event loop lag, GC):
+
+- **API service** (`:3000`) — `GET /metrics`, registry defined in [`src/metrics.ts`](./src/metrics.ts). Covers HTTP latency/throughput (`http_request_duration_seconds`, `http_requests_total`), error rates, indexer ingestion health, DB/cache/replica status. Gated by [`metricsAuthGuard`](./src/middleware/metricsAuthGuard.ts): if `METRICS_TOKEN` is set, requests must supply it via `Authorization: Bearer <token>` or `X-Metrics-Token`, otherwise they get `401`; if unset, only loopback callers (`127.0.0.1`/`::1`) are allowed and everyone else gets `403`. Set `METRICS_TOKEN` when scraping from outside the host (e.g. a remote Prometheus).
+- **Indexer service** (`:3001`) — `GET /metrics`, registry defined in [`indexer/src/metrics.js`](./indexer/src/metrics.js). Covers event ingestion, decode latency, RPC errors, and DB pool utilisation. This endpoint is unauthenticated and intended to be scraped only from inside the trusted service network (e.g. the Docker Compose network); do not expose port `3001` publicly without adding equivalent access control.
 
 ## Registering a Contract ABI
 
@@ -144,6 +152,7 @@ Because the server caches keys, a typical rotation involves:
 | `INDEXER_POLL_INTERVAL_MS` | `5000`          | Polling interval              |
 | `INDEXER_BATCH_SIZE`       | `100`           | Ledgers per batch             |
 | `ADMIN_SECRET`             | —               | Bearer token required by every `/api/admin/*` route (indexer). See [`docs/ADMIN_AUTH.md`](./docs/ADMIN_AUTH.md). |
+| `METRICS_TOKEN`            | —               | Bearer/`X-Metrics-Token` required to scrape the API service's `GET /metrics` from outside the host. Unset restricts it to loopback callers. See [Metrics](#metrics). |
 | `MOCK_DATA`                | `false`         | Gates experimental endpoints that fabricate demo data instead of a real integration. See [Experimental & Mock Data](#experimental--mock-data). `ENABLE_EXPERIMENTAL` is accepted as an alias. |
 
 ## Experimental & Mock Data
