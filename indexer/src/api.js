@@ -861,7 +861,7 @@ export function createApi({ logDestination, dbOverride } = {}) {
       }
 
       const rows = await db.getTokenHolders(contractId);
-      const holders = rows.map((r) => ({
+      const holders = rows.map((/** @type {any} */ r) => ({
         address: r.address,
         balance_raw: r.balance_raw,
         balance: formatAmount(r.balance_raw, decimals),
