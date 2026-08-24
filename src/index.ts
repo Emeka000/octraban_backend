@@ -33,6 +33,7 @@ import { apiKeyAuth } from './middleware/apiKeyAuth';
 import { auditLogMiddleware } from './middleware/auditLog';
 import { asyncHandler } from './middleware/asyncHandler';
 import { rejectUntrustedForwardedHeaders } from './middleware/proxyTrust';
+import { metricsAuthGuard } from './middleware/metricsAuthGuard';
 import { billingRouter } from './services/stripe-billing';
 import { logger } from './logger';
 import { validateJwtKeysAtStartup } from './auth/keys';
@@ -177,6 +178,7 @@ app.use('/api/billing', billingRouter);
 
 app.get(
   '/metrics',
+  metricsAuthGuard,
   asyncHandler(async (_req, res) => {
     res.set('Content-Type', registry.contentType);
     res.end(await registry.metrics());

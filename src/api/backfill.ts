@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { prismaRead as prisma } from '../db';
 import { ChannelManager } from '../feed/channelManager';
+import { isMockDataEnabled } from '../config/mockData';
 
 const router = Router();
 
@@ -124,6 +125,9 @@ router.get('/:requestId', async (req, res) => {
       response.fileSizeBytes = request.fileSizeBytes;
       response.recordCount = request.recordCount;
       response.completedAt = request.completedAt;
+      // Export generation is not implemented against a real storage backend yet;
+      // a 'completed' request can only exist because MOCK_DATA was enabled when it ran.
+      response.mock = true;
     } else if (request.status === 'failed') {
       response.errorMessage = request.errorMessage;
     }
@@ -182,7 +186,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-async function processBackfillRequest(requestId: string) {
+export async function processBackfillRequest(requestId: string) {
   try {
     // Update status to processing
     await prisma.backfillRequest.update({
@@ -195,6 +199,18 @@ async function processBackfillRequest(requestId: string) {
     });
 
     if (!request) return;
+
+    if (!isMockDataEnabled()) {
+      await prisma.backfillRequest.update({
+        where: { id: requestId },
+        data: {
+          status: 'failed',
+          errorMessage:
+            'Historical data export is not implemented against a real storage backend yet. Set MOCK_DATA=true to receive a labeled simulated export for local development.',
+        },
+      });
+      return;
+    }
 
     // Simulate data export process
     const totalSteps = 100;
@@ -211,7 +227,7 @@ async function processBackfillRequest(requestId: string) {
       });
     }
 
-    // Generate mock file URL and metadata
+    // Generate a simulated file URL and metadata — only reachable in MOCK_DATA mode
     const fileUrl = `https://api.example.com/downloads/${requestId}.${request.format}`;
     const recordCount = await getRecordCount(
       request.channelName,
@@ -259,8 +275,9 @@ async function getRecordCount(
   startTime: Date,
   endTime: Date,
 ): Promise<number> {
-  // In real implementation, this would query the actual data tables
-  const mockCounts: Record<string, number> = {
+  // Demo counts only — only reachable in MOCK_DATA mode. Real implementation
+  // would query the actual data tables.
+  const demoCounts: Record<string, number> = {
     transactions: 100000,
     events: 500000,
     ledgers: 10000,
@@ -268,7 +285,7 @@ async function getRecordCount(
     metrics: 5000,
   };
 
-  const baseCount = mockCounts[channelName] || 10000;
+  const baseCount = demoCounts[channelName] || 10000;
   const daysDiff = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60 * 24);
   return Math.round((baseCount * daysDiff) / 30); // Scale by month
 }

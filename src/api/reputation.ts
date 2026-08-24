@@ -130,22 +130,14 @@ reputationRouter.get(
     const category = req.params.category || 'overall';
     const limit = Math.min(100, Math.max(1, Number(req.query.limit ?? 10)));
 
-    // Load all profiles from DB
+    // Load all profiles from DB and recompute their leaderboard entry from the
+    // same real on-chain signals used by the per-address scoring endpoints.
     const profiles = await prismaRead.reputationProfile.findMany();
+    const chainData: ChainReputationData[] = (
+      await Promise.all(profiles.map((p) => fetchProfileData(p.address)))
+    ).flat();
 
-    // Transform profiles back to ChainReputationData for calculation
-    const mockChainData: ChainReputationData[] = [];
-    for (const p of profiles) {
-      mockChainData.push({
-        chainId: p.chain,
-        address: p.address,
-        transactionCount: 10,
-        successfulTransactionCount: 10,
-        sybilRisk: p.combinedScore && p.combinedScore < 300 ? 0.8 : 0.1,
-      });
-    }
-
-    const leaderboard = createLeaderboard(mockChainData, category, limit);
+    const leaderboard = createLeaderboard(chainData, category, limit);
     return res.json({ category, leaderboard });
   }),
 );
@@ -1310,7 +1302,7 @@ reputationRouter.get(
     const chainData = await fetchProfileData(address);
     const graph = buildTrustGraph(chainData);
 
-    // page-rank / influence score mock
+    // Simplified page-rank-style influence score derived from real trust-graph edges
     let influenceScore = 1.0;
     for (const e of graph.edges) {
       if (e.to === address) {
@@ -2236,7 +2228,7 @@ reputationRouter.post(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🔒 PRE-EXISTING COMPATIBILITY MOCK ROUTES (TO PRESERVE INTEGRATION TESTS)
+// 🔒 PRE-EXISTING COMPATIBILITY LEGACY ROUTES (TO PRESERVE INTEGRATION TESTS)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**

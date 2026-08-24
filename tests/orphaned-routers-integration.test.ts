@@ -335,11 +335,12 @@ integrationTest('orphaned routers (requires TEST_API_URL)', () => {
       expect(body).toHaveProperty('assets');
     });
 
-    it('GET /oracle-feeds/assets/XLM-USD/price returns 200', async () => {
+    it('GET /oracle-feeds/assets/XLM-USD/price returns 404 with MOCK_DATA unset (Issue #7)', async () => {
+      // Fabricated prices are gated behind MOCK_DATA and disabled by default —
+      // route is mounted, so this is a 404 from the mock gate, not a missing route.
       const { status, body } = await get('/oracle-feeds/assets/XLM-USD/price');
-      assertNotFound(status, '/oracle-feeds/assets/XLM-USD/price');
-      expect(status).toBe(200);
-      expect(body).toHaveProperty('price');
+      expect(status).toBe(404);
+      expect(body).toHaveProperty('mock', true);
     });
 
     it('GET /oracle-feeds/providers returns 200', async () => {

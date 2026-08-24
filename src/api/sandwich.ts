@@ -373,14 +373,14 @@ sandwichRouter.get(
       select: { profitUsd: true, lossUsd: true, confidence: true },
     });
 
-    const mockPatterns = recentPatterns.map((p) => ({
+    const recentSandwichPatterns = recentPatterns.map((p) => ({
       protocol,
       profitEstimateUsd: p.profitUsd ?? 0,
       victimLossUsd: p.lossUsd ?? 0,
       confidence: Math.round((p.confidence ?? 0) * 100),
     })) as SandwichPattern[];
 
-    const risk = estimateSandwichRisk(amount, protocol, mockPatterns);
+    const risk = estimateSandwichRisk(amount, protocol, recentSandwichPatterns);
 
     return res.json({
       protocol,

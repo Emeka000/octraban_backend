@@ -84,6 +84,20 @@ npm run index         # start indexer (separate terminal)
 | GET    | `/api/v1/tokens/:address`               | Token detail                                                |
 | GET    | `/api/v1/tokens/:address/transfers`     | Token transfer history                                      |
 | GET    | `/health`                               | Health check                                                |
+| GET    | `/metrics`                              | Prometheus scrape endpoint (see [Metrics](#metrics))        |
+
+## Metrics
+
+Both services expose a Prometheus-format scrape endpoint backed by a shared `prom-client` `Registry`, including default Node.js process metrics (CPU, memory, event loop lag, GC):
+
+- **API service** (`:3000`) — `GET /metrics`, registry defined in [`src/metrics.ts`](./src/metrics.ts). Covers HTTP latency/throughput (`http_request_duration_seconds`, `http_requests_total`), error rates, indexer ingestion health, DB/cache/replica status. Gated by [`metricsAuthGuard`](./src/middleware/metricsAuthGuard.ts): if `METRICS_TOKEN` is set, requests must supply it via `Authorization: Bearer <token>` or `X-Metrics-Token`, otherwise they get `401`; if unset, only loopback callers (`127.0.0.1`/`::1`) are allowed and everyone else gets `403`. Set `METRICS_TOKEN` when scraping from outside the host (e.g. a remote Prometheus).
+- **Indexer service** (`:3001`) — `GET /metrics`, registry defined in [`indexer/src/metrics.js`](./indexer/src/metrics.js). Covers event ingestion, decode latency, RPC errors, and DB pool utilisation. This endpoint is unauthenticated and intended to be scraped only from inside the trusted service network (e.g. the Docker Compose network); do not expose port `3001` publicly without adding equivalent access control.
+
+## Decode Fallback Metric
+
+The indexer's `GET /metrics` (Prometheus registry defined in [`indexer/src/metrics.js`](./indexer/src/metrics.js)) exposes `soroban_decode_fallback_total{contract_id="..."}`: a counter of events the decoder could not attribute to a recognised function — it fell back to `function: "unknown"` and returned only `raw_topics`. Each occurrence also emits a structured debug log (`component: "decoder"`, `event: "decode_fallback"`, with `contract_id`, `ledger`, `tx_hash`) for sampling.
+
+A rising fallback rate means a growing share of on-chain activity is going through with no human-readable description — typically an unregistered contract ABI, an unrecognised event signature, or a decoder regression — and should be investigated before it silently erodes the product's core value (human-readable event descriptions).
 
 ## Registering a Contract ABI
 
@@ -144,6 +158,61 @@ Because the server caches keys, a typical rotation involves:
 | `INDEXER_POLL_INTERVAL_MS` | `5000`          | Polling interval              |
 | `INDEXER_BATCH_SIZE`       | `100`           | Ledgers per batch             |
 | `ADMIN_SECRET`             | —               | Bearer token required by every `/api/admin/*` route (indexer). See [`docs/ADMIN_AUTH.md`](./docs/ADMIN_AUTH.md). |
+| `METRICS_TOKEN`            | —               | Bearer/`X-Metrics-Token` required to scrape the API service's `GET /metrics` from outside the host. Unset restricts it to loopback callers. See [Metrics](#metrics). |
+| `MOCK_DATA`                | `false`         | Gates experimental endpoints that fabricate demo data instead of a real integration. See [Experimental & Mock Data](#experimental--mock-data). `ENABLE_EXPERIMENTAL` is accepted as an alias. |
+
+## Experimental & Mock Data
+
+A handful of endpoints have no real upstream integration yet (no oracle/bridge
+connection, no ZK-proof verifier, no real export pipeline) and would otherwise
+have to fabricate the data they return. Those endpoints are gated behind the
+shared framework in [`src/config/mockData.ts`](./src/config/mockData.ts):
+
+- **Off by default** — the endpoint responds `404` with `{ "error": "...", "mock": true }`
+  instead of returning synthetic data.
+- **`MOCK_DATA=true`** (or `ENABLE_EXPERIMENTAL=true`) — the endpoint returns its
+  demo/simulated response, always annotated with `"mock": true` so no consumer can
+  mistake it for real data.
+
+Currently gated endpoints:
+
+| Endpoint | Why it's gated |
+| --- | --- |
+| `GET /oracle-feeds/assets/:assetPair/price` | No live oracle provider is connected; price is a static demo value. |
+| `GET /arbitrage/cross-chain/opportunities`, `GET /arbitrage/cross-chain/bridges` | No live cross-chain oracle/bridge integration; prices and bridge status are static demo data. |
+| `POST /arbitrage/bot/deploy`, `GET/POST /arbitrage/bot/:address/*` | Simulated bot execution — no real capital or trades, PnL drifts randomly for demonstration. |
+| `GET /data-market/prices/history` | No real price-history time series exists yet; the series is synthetically generated. |
+| `POST /data-market/challenge/zk-proof`, `POST /data-market/challenge/:id/verify` (zk_proof challenges) | Real zk-SNARK verification isn't implemented; outside `MOCK_DATA` mode these always fail rather than falsely report a proof as valid. |
+| `POST /feed/backfill` (via `GET /feed/backfill/:requestId`) | Historical export generation isn't implemented against a real storage backend; outside `MOCK_DATA` mode the request fails with a clear `errorMessage` instead of returning a fake download URL. |
+
+A CI check (`npm run check:mock-gating`) fails the build if a new endpoint under
+`src/api/` mentions "mock" without importing the shared framework, so new
+fabricated-data endpoints can't ship ungated.
+
+## OpenTelemetry Tracing
+
+Tracing is **off by default** and never starts unless you explicitly enable it.
+A missing or unreachable collector is handled gracefully — it logs a warning and
+the service continues without tracing.
+
+| Variable          | Default                    | Description                                                                                   |
+| ----------------- | -------------------------- | --------------------------------------------------------------------------------------------- |
+| `TRACING_ENABLED` | _(unset — tracing is off)_ | Set to `true` or `1` to start the OpenTelemetry SDK                                          |
+| `OTLP_ENDPOINT`   | `http://localhost:4318`    | OTLP collector base URL. Setting this variable alone also enables tracing.                    |
+| `SERVICE_NAME`    | `octraban`                 | Service name reported in traces                                                               |
+
+### Quick start (local collector)
+
+```bash
+# Start a local Jaeger all-in-one (OTLP HTTP on :4318)
+docker run -d -p 16686:16686 -p 4318:4318 jaegertracing/all-in-one:latest
+
+# Enable tracing in your .env
+TRACING_ENABLED=true
+OTLP_ENDPOINT=http://localhost:4318
+```
+
+Spans are flushed cleanly on `SIGTERM` and `SIGINT`.
 
 ## Mainnet Config
 
@@ -192,6 +261,12 @@ The indexer is still plain JavaScript, unlike the root API's TypeScript. It's be
 under type checking incrementally (`npm run typecheck` in `indexer/`, wired into CI) — see
 [Indexer Type Checking](./CONTRIBUTING.md#indexer-type-checking) in CONTRIBUTING.md for the
 approach and which modules are covered so far.
+
+Both processes migrate the same database with two independent migration systems (Prisma for
+the API, a small SQL runner for the indexer). See
+[docs/database-ownership.md](./docs/database-ownership.md) for which tables each one owns and
+for `npm run db:bringup`, the single command that brings a fresh database to a working state
+for both.
 
 ### Data flow
 
