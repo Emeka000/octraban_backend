@@ -5,7 +5,7 @@
  * soroban_decode_fallback_total (labeled by contract) and emit a structured
  * debug log; decoding a known event must not.
  */
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { isDecodeFallback, recordDecodeFallback } from "../src/decoder.js";
 import { decodeFallbackTotal } from "../src/metrics.js";

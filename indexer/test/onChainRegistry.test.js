@@ -13,7 +13,7 @@
  *  - getEventsFromChain() returns a decoded array on success.
  */
 
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it, beforeEach, afterEach } from "vitest";
 import assert from "node:assert/strict";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

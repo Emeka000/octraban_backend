@@ -10,7 +10,7 @@
  * against the TS side. If either implementation's wording drifts, its half
  * of this fixture pair fails — catching the exact risk the issue describes.
  */
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

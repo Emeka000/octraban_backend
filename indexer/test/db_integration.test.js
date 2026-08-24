@@ -1,11 +1,11 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 
 describe("db integration (mock pool)", () => {
   let mockPool;
   let db;
 
-  before(() => {
+  beforeAll(() => {
     mockPool = {
       _queries: [],
       async query(sql, params) {
@@ -119,7 +119,7 @@ describe("db integration (mock pool)", () => {
     };
   });
 
-  after(() => {
+  afterAll(() => {
     mockPool._queries = [];
   });
 

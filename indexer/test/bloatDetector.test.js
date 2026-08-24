@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { StrKey } from "@stellar/stellar-sdk";
 import { countNewPersistentKeys, isHighBloatRisk, BLOAT_THRESHOLD } from "../src/bloatDetector.js";

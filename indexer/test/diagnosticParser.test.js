@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { xdr } from "@stellar/stellar-sdk";
 import { parseDiagnosticEvents, extractFailureReason } from "../src/diagnosticParser.js";

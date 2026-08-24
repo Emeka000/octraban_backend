@@ -1,7 +1,7 @@
 /**
  * Issue #164 — Tests for zkHostFunctions.js (CAP-0080)
  */
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { parseZkHostFunctions, computeZkCostDelta, detect } from "../src/zkHostFunctions.js";
 

@@ -4,6 +4,7 @@
  * Tests the Zod schema validation for environment variables.
  * Ensures proper handling of invalid, missing, and malformed values.
  */
+import { vi } from "vitest";
 
 describe("Configuration Validation", () => {
   let originalEnv;
@@ -17,7 +18,7 @@ describe("Configuration Validation", () => {
     // Restore original environment
     process.env = originalEnv;
     // Clear the module cache to allow re-importing with new env vars
-    jest.resetModules();
+    vi.resetModules();
   });
 
   describe("Database URL Validation", () => {
@@ -25,8 +26,8 @@ describe("Configuration Validation", () => {
       delete process.env.DATABASE_URL;
       
       // Capture console.error to suppress test output noise
-      const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation();
-      const processExitSpy = jest.spyOn(process, "exit").mockImplementation((code) => {
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation();
+      const processExitSpy = vi.spyOn(process, "exit").mockImplementation((code) => {
         throw new Error(`process.exit(${code})`);
       });
 
@@ -44,8 +45,8 @@ describe("Configuration Validation", () => {
     it("should reject invalid DATABASE_URL format", async () => {
       process.env.DATABASE_URL = "not-a-postgres-url";
       
-      const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation();
-      const processExitSpy = jest.spyOn(process, "exit").mockImplementation((code) => {
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation();
+      const processExitSpy = vi.spyOn(process, "exit").mockImplementation((code) => {
         throw new Error(`process.exit(${code})`);
       });
 
@@ -75,8 +76,8 @@ describe("Configuration Validation", () => {
     it("should reject NaN for POLL_MS", async () => {
       process.env.POLL_MS = "not-a-number";
       
-      const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation();
-      const processExitSpy = jest.spyOn(process, "exit").mockImplementation((code) => {
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation();
+      const processExitSpy = vi.spyOn(process, "exit").mockImplementation((code) => {
         throw new Error(`process.exit(${code})`);
       });
 
@@ -93,8 +94,8 @@ describe("Configuration Validation", () => {
     it("should reject negative POLL_MS", async () => {
       process.env.POLL_MS = "-1000";
       
-      const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation();
-      const processExitSpy = jest.spyOn(process, "exit").mockImplementation((code) => {
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation();
+      const processExitSpy = vi.spyOn(process, "exit").mockImplementation((code) => {
         throw new Error(`process.exit(${code})`);
       });
 
@@ -111,8 +112,8 @@ describe("Configuration Validation", () => {
     it("should reject POLL_MS below minimum threshold", async () => {
       process.env.POLL_MS = "50"; // Below 100ms minimum
       
-      const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation();
-      const processExitSpy = jest.spyOn(process, "exit").mockImplementation((code) => {
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation();
+      const processExitSpy = vi.spyOn(process, "exit").mockImplementation((code) => {
         throw new Error(`process.exit(${code})`);
       });
 
@@ -143,8 +144,8 @@ describe("Configuration Validation", () => {
     it("should reject zero for positive int fields", async () => {
       process.env.PORT = "0";
       
-      const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation();
-      const processExitSpy = jest.spyOn(process, "exit").mockImplementation((code) => {
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation();
+      const processExitSpy = vi.spyOn(process, "exit").mockImplementation((code) => {
         throw new Error(`process.exit(${code})`);
       });
 
@@ -182,8 +183,8 @@ describe("Configuration Validation", () => {
     it("should reject PORT above 65535", async () => {
       process.env.PORT = "99999";
       
-      const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation();
-      const processExitSpy = jest.spyOn(process, "exit").mockImplementation((code) => {
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation();
+      const processExitSpy = vi.spyOn(process, "exit").mockImplementation((code) => {
         throw new Error(`process.exit(${code})`);
       });
 
@@ -213,8 +214,8 @@ describe("Configuration Validation", () => {
     it("should reject invalid SOROBAN_RPC_URL", async () => {
       process.env.SOROBAN_RPC_URL = "not-a-url";
       
-      const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation();
-      const processExitSpy = jest.spyOn(process, "exit").mockImplementation((code) => {
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation();
+      const processExitSpy = vi.spyOn(process, "exit").mockImplementation((code) => {
         throw new Error(`process.exit(${code})`);
       });
 
@@ -252,8 +253,8 @@ describe("Configuration Validation", () => {
     it("should reject invalid optional URL", async () => {
       process.env.REDIS_URL = "invalid-url";
       
-      const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation();
-      const processExitSpy = jest.spyOn(process, "exit").mockImplementation((code) => {
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation();
+      const processExitSpy = vi.spyOn(process, "exit").mockImplementation((code) => {
         throw new Error(`process.exit(${code})`);
       });
 
@@ -290,8 +291,8 @@ describe("Configuration Validation", () => {
     it("should reject invalid cron expression", async () => {
       process.env.PRUNE_CRON = "invalid cron";
       
-      const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation();
-      const processExitSpy = jest.spyOn(process, "exit").mockImplementation((code) => {
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation();
+      const processExitSpy = vi.spyOn(process, "exit").mockImplementation((code) => {
         throw new Error(`process.exit(${code})`);
       });
 
@@ -382,8 +383,8 @@ describe("Configuration Validation", () => {
     it("should reject negative float for positive number", async () => {
       process.env.ALERT_MIN_THROUGHPUT = "-0.5";
       
-      const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation();
-      const processExitSpy = jest.spyOn(process, "exit").mockImplementation((code) => {
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation();
+      const processExitSpy = vi.spyOn(process, "exit").mockImplementation((code) => {
         throw new Error(`process.exit(${code})`);
       });
 

@@ -10,7 +10,7 @@
  * - Missing ABI graceful fallback
  * - Malformed XDR handling
  */
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { xdr, StrKey } from "@stellar/stellar-sdk";
 import { decodeContractEvent } from "../src/xdr_decoder.js";

@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it, afterEach } from "vitest";
 import assert from "node:assert/strict";
 import request from "supertest";
 import { PassThrough } from "node:stream";
@@ -6,12 +6,16 @@ import { randomUUID } from "node:crypto";
 import { createApi } from "../src/api.js";
 
 describe("API request correlation and logging", () => {
+  let app;
+
+  afterEach(() => new Promise((resolve) => (app ? app.close(resolve) : resolve())));
+
   it("returns X-Request-Id and preserves traceparent while logging the same request id", async () => {
     const logChunks = [];
     const logStream = new PassThrough();
     logStream.on("data", (chunk) => logChunks.push(chunk.toString()));
 
-    const app = createApi({
+    app = createApi({
       logDestination: logStream,
       dbOverride: {
         async getEvents() {
@@ -38,7 +42,7 @@ describe("API request correlation and logging", () => {
   });
 
   it("records a Prometheus histogram with method, route, and status labels", async () => {
-    const app = createApi({
+    app = createApi({
       logDestination: new PassThrough(),
       dbOverride: {
         async getEvents() {
