@@ -32,6 +32,9 @@ const options: swaggerJsdoc.Options = {
       { name: 'Threat Intelligence', description: 'Advisories, review workflow, subscriptions, webhooks, RSS/JSON feeds, analytics, and source management' },
       { name: 'Sandbox', description: 'In-memory Soroban sandbox for developing and testing smart contracts locally. Live VM state is kept in memory; sessions persist to the database.' },
       { name: 'Reputation', description: 'Address reputation scoring, Sybil detection, attestations, verifiable credentials, cross-chain identity linking, trust networks, governance, and reputation NFTs.' },
+      { name: 'Oracle Feeds', description: 'Oracle price feed subscriptions and current/historical pricing.' },
+      { name: 'Arbitrage', description: 'Arbitrage opportunity detection, simulation, and cross-chain/bot demo endpoints.' },
+      { name: 'Data Market', description: 'Decentralized archival storage market: nodes, challenges, SLAs, and pricing.' },
     ],
     components: {
       securitySchemes: {

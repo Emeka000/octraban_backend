@@ -48,6 +48,7 @@ import { Prisma } from '@prisma/client';
 import { z, ZodError } from 'zod';
 import { prismaRead, prismaWrite } from '../db';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { isMockDataEnabled, sendMockGated } from '../config/mockData';
 
 export const dataMarketRouter = Router();
 
@@ -152,7 +153,10 @@ function verifyByteRangeProof(
 }
 
 function verifyZkProof(responseData: Record<string, unknown>): boolean {
-  // Stub: verify that the submitted ZK proof has the required fields
+  // Real zk-SNARK verification is not implemented. Never claim a proof is
+  // cryptographically valid outside MOCK_DATA mode, where this structural
+  // field check exists only to exercise the challenge flow in demos.
+  if (!isMockDataEnabled()) return false;
   return (
     typeof responseData['proof'] === 'string' &&
     typeof responseData['publicSignals'] === 'object' &&
@@ -716,7 +720,16 @@ dataMarketRouter.post(
       });
     }
 
-    return res.json({ challenge: updatedChallenge, passed, slashAmount });
+    return res.json({
+      challenge: updatedChallenge,
+      passed,
+      slashAmount,
+      ...(challenge.challengeType === 'zk_proof' && !isMockDataEnabled()
+        ? {
+            note: 'ZK-proof verification is not implemented outside MOCK_DATA mode; the challenge was treated as failed.',
+          }
+        : {}),
+    });
   }),
 );
 
@@ -749,7 +762,11 @@ dataMarketRouter.post(
       },
     });
 
-    return res.json({ verified, circuit: 'poseidon_storage_v1' });
+    return res.json({
+      verified,
+      circuit: 'poseidon_storage_v1',
+      verificationMethod: isMockDataEnabled() ? 'structural-stub' : 'unavailable',
+    });
   }),
 );
 
@@ -951,6 +968,27 @@ dataMarketRouter.get(
   }),
 );
 
+/**
+ * @swagger
+ * /data-market/prices/history:
+ *   get:
+ *     summary: Synthetic price history time series (demo only)
+ *     description: >
+ *       No real price-history time series exists yet; this generates a
+ *       synthetic series. Disabled by default; set MOCK_DATA=true to enable.
+ *       Responses are marked `mock: true`.
+ *     tags: [Data Market]
+ *     x-experimental: true
+ *     parameters:
+ *       - in: query
+ *         name: days
+ *         schema: { type: integer, maximum: 90, default: 7 }
+ *     responses:
+ *       200:
+ *         description: Synthetic history (only when MOCK_DATA=true)
+ *       404:
+ *         description: Feature disabled (default)
+ */
 // GET /prices/history
 dataMarketRouter.get(
   '/prices/history',
@@ -965,7 +1003,14 @@ dataMarketRouter.get(
       };
     }).reverse();
 
-    return res.json({ history, days });
+    return sendMockGated(
+      res,
+      { history, days },
+      {
+        disabledMessage:
+          'Historical price aggregation is not implemented yet — no real price-history time series exists. Set MOCK_DATA=true for a labeled synthetic series.',
+      },
+    );
   }),
 );
 

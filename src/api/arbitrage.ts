@@ -7,6 +7,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { prismaRead, prismaWrite } from '../db';
 import { cacheGet, cacheSet } from '../cache';
+import { annotateMock, isMockDataEnabled, sendMockGated } from '../config/mockData';
 import {
   buildPriceGraph,
   detectNegativeCycles,
@@ -1216,8 +1217,49 @@ const deployedBots = new Map<
   }
 >();
 
+/**
+ * @swagger
+ * /arbitrage/bot/deploy:
+ *   post:
+ *     summary: Deploy a simulated arbitrage-executing bot (demo only)
+ *     description: >
+ *       No real capital or trades are involved. Disabled by default; set
+ *       MOCK_DATA=true to enable. All responses are marked `mock: true`.
+ *     tags: [Arbitrage]
+ *     x-experimental: true
+ *     responses:
+ *       201:
+ *         description: Simulated bot deployed (only when MOCK_DATA=true)
+ *       404:
+ *         description: Feature disabled (default)
+ * /arbitrage/bot/{address}/status:
+ *   get:
+ *     summary: Get simulated bot status and PnL (demo only)
+ *     description: PnL and trade counts drift randomly for demonstration purposes.
+ *     tags: [Arbitrage]
+ *     x-experimental: true
+ *     parameters:
+ *       - in: path
+ *         name: address
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Simulated bot status (only when MOCK_DATA=true)
+ *       404:
+ *         description: Feature disabled (default) or bot not found
+ */
+function botFeatureDisabledResponse(res: Response) {
+  return res.status(404).json({
+    error:
+      'Automated bot deployment is a simulated demo feature (no real capital or trades) and is disabled by default. Set MOCK_DATA=true to enable it.',
+    mock: true,
+  });
+}
+
 arbitrageRouter.post('/bot/deploy', async (req: Request, res: Response) => {
   try {
+    if (!isMockDataEnabled()) return botFeatureDisabledResponse(res);
     const config = botDeploySchema.parse(req.body);
     // Generate a deterministic contract-like address for the bot instance
     const address = `C${Buffer.from(JSON.stringify(config) + Date.now())
@@ -1234,13 +1276,15 @@ arbitrageRouter.post('/bot/deploy', async (req: Request, res: Response) => {
       totalTrades: 0,
     });
 
-    res.status(201).json({
-      success: true,
-      address,
-      status: 'running',
-      config,
-      message: 'Arbitrage bot contract deployed. Monitor via GET /bot/:address/status',
-    });
+    res.status(201).json(
+      annotateMock({
+        success: true,
+        address,
+        status: 'running',
+        config,
+        message: 'Simulated arbitrage bot deployed (no real capital or trades). Monitor via GET /bot/:address/status',
+      }),
+    );
   } catch (e) {
     if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors });
     res.status(500).json({ error: String(e) });
@@ -1248,32 +1292,36 @@ arbitrageRouter.post('/bot/deploy', async (req: Request, res: Response) => {
 });
 
 arbitrageRouter.get('/bot/:address/status', (req: Request, res: Response) => {
+  if (!isMockDataEnabled()) return botFeatureDisabledResponse(res);
   const bot = deployedBots.get(req.params.address);
   if (!bot) return res.status(404).json({ error: 'Bot not found' });
 
-  // Simulate some PnL drift for demonstration
+  // Simulate some PnL drift for demonstration — only reachable in MOCK_DATA mode
   bot.pnl += Math.random() * 0.5;
   bot.totalTrades += Math.floor(Math.random() * 3);
 
-  res.json({
-    address: bot.address,
-    status: bot.status,
-    deployedAt: bot.deployedAt,
-    pnl: bot.pnl.toFixed(4),
-    totalTrades: bot.totalTrades,
-    config: bot.config,
-    uptime: `${Math.floor((Date.now() - new Date(bot.deployedAt).getTime()) / 1000)}s`,
-  });
+  res.json(
+    annotateMock({
+      address: bot.address,
+      status: bot.status,
+      deployedAt: bot.deployedAt,
+      pnl: bot.pnl.toFixed(4),
+      totalTrades: bot.totalTrades,
+      config: bot.config,
+      uptime: `${Math.floor((Date.now() - new Date(bot.deployedAt).getTime()) / 1000)}s`,
+    }),
+  );
 });
 
 arbitrageRouter.post('/bot/:address/config', (req: Request, res: Response) => {
+  if (!isMockDataEnabled()) return botFeatureDisabledResponse(res);
   const bot = deployedBots.get(req.params.address);
   if (!bot) return res.status(404).json({ error: 'Bot not found' });
 
   try {
     const updates = botDeploySchema.partial().parse(req.body);
     bot.config = { ...bot.config, ...updates };
-    res.json({ success: true, address: bot.address, config: bot.config });
+    res.json(annotateMock({ success: true, address: bot.address, config: bot.config }));
   } catch (e) {
     if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors });
     res.status(500).json({ error: String(e) });
@@ -1281,16 +1329,47 @@ arbitrageRouter.post('/bot/:address/config', (req: Request, res: Response) => {
 });
 
 arbitrageRouter.post('/bot/:address/pause', (req: Request, res: Response) => {
+  if (!isMockDataEnabled()) return botFeatureDisabledResponse(res);
   const bot = deployedBots.get(req.params.address);
   if (!bot) return res.status(404).json({ error: 'Bot not found' });
 
   bot.status = bot.status === 'paused' ? 'running' : 'paused';
-  res.json({ success: true, address: bot.address, status: bot.status });
+  res.json(annotateMock({ success: true, address: bot.address, status: bot.status }));
 });
 
 // ─── Cross-Chain Arbitrage Detection (Stretch #15) ───────────────────────────
 
-// Mock cross-chain price feeds (production: integrate with oracle/bridge APIs)
+/**
+ * @swagger
+ * /arbitrage/cross-chain/opportunities:
+ *   get:
+ *     summary: Cross-chain arbitrage opportunities (demo only)
+ *     description: >
+ *       Derived from static demo price feeds, not live oracle/bridge data.
+ *       Disabled by default; set MOCK_DATA=true to enable. Responses are
+ *       marked `mock: true`.
+ *     tags: [Arbitrage]
+ *     x-experimental: true
+ *     responses:
+ *       200:
+ *         description: Demo opportunities (only when MOCK_DATA=true)
+ *       404:
+ *         description: Feature disabled (default)
+ * /arbitrage/cross-chain/bridges:
+ *   get:
+ *     summary: Cross-chain bridge info (demo only)
+ *     description: >
+ *       Static demo bridge metadata, not a live bridge integration. Disabled
+ *       by default; set MOCK_DATA=true to enable.
+ *     tags: [Arbitrage]
+ *     x-experimental: true
+ *     responses:
+ *       200:
+ *         description: Demo bridge list (only when MOCK_DATA=true)
+ *       404:
+ *         description: Feature disabled (default)
+ */
+// Demo cross-chain price feeds — gated behind MOCK_DATA (production: integrate with oracle/bridge APIs)
 const CROSS_CHAIN_PRICES: Record<string, Record<string, number>> = {
   XLM: { stellar: 0.1234, ethereum: 0.1251, polygon: 0.1229 },
   USDC: { stellar: 1.0, ethereum: 1.0002, polygon: 0.9998 },
@@ -1303,6 +1382,14 @@ const BRIDGE_INFO: Record<string, { latencyMs: number; feePct: number; status: s
 };
 
 arbitrageRouter.get('/cross-chain/opportunities', (_req: Request, res: Response) => {
+  if (!isMockDataEnabled()) {
+    return res.status(404).json({
+      error:
+        'Cross-chain arbitrage detection requires live oracle/bridge integrations that are not yet connected. Set MOCK_DATA=true for labeled demo data.',
+      mock: true,
+    });
+  }
+
   const opportunities: unknown[] = [];
 
   for (const [token, chainPrices] of Object.entries(CROSS_CHAIN_PRICES)) {
@@ -1343,12 +1430,13 @@ arbitrageRouter.get('/cross-chain/opportunities', (_req: Request, res: Response)
     }
   }
 
-  res.json({
-    opportunities,
-    count: opportunities.length,
-    supportedChains: ['stellar', 'ethereum', 'polygon'],
-    note: 'Cross-chain prices sourced from oracle feeds. Bridge latency affects profitability.',
-  });
+  res.json(
+    annotateMock({
+      opportunities,
+      count: opportunities.length,
+      supportedChains: ['stellar', 'ethereum', 'polygon'],
+    }),
+  );
 });
 
 arbitrageRouter.get('/cross-chain/bridges', (_req: Request, res: Response) => {
@@ -1361,5 +1449,12 @@ arbitrageRouter.get('/cross-chain/bridges', (_req: Request, res: Response) => {
     estimatedCostFor10kUSD: `${((10000 * info.feePct) / 100).toFixed(2)} USD`,
   }));
 
-  res.json({ bridges, count: bridges.length });
+  return sendMockGated(
+    res,
+    { bridges, count: bridges.length },
+    {
+      disabledMessage:
+        'Cross-chain bridge status requires live bridge integrations that are not yet connected. Set MOCK_DATA=true for labeled demo data.',
+    },
+  );
 });

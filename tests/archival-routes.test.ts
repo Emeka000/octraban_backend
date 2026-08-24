@@ -519,6 +519,9 @@ describe('GET /feed/backfill/:requestId', () => {
     const body = await res.json();
     expect(body.downloadUrl).toBe('https://example.com/file.csv');
     expect(body.recordCount).toBe(500);
+    // A 'completed' request can only exist because MOCK_DATA was enabled when
+    // the export ran — real export generation isn't implemented yet (Issue #7).
+    expect(body.mock).toBe(true);
   });
 });
 

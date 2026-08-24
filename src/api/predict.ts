@@ -133,7 +133,7 @@ predictRouter.post(
       },
     });
 
-    // Mock perturbation: alter recent data baseline
+    // Apply the requested perturbation to the historical data baseline
     let data = await featureStore.getHistoricalData('tx_volume', 30);
     if (Array.isArray(perturbations)) {
       for (const p of perturbations) {
