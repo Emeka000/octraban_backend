@@ -121,6 +121,32 @@ curl -X POST http://localhost:3000/api/v1/contracts \
   }'
 ```
 
+## WebSocket API
+
+Real-time Soroban events are streamed over WebSocket at `/ws/events`.
+
+### Quick connection
+
+```js
+// Authenticated with an API key, filtered to a single contract
+const ws = new WebSocket(
+  'wss://<host>/ws/events?token=<api-key>&contract=CXXX...&eventType=token_transfer'
+);
+ws.onmessage = (e) => console.log(JSON.parse(e.data));
+```
+
+### Auth & security
+
+Every connection requires a valid credential — either an API key (`?token=<key>` or `X-Api-Key` header) or a Bearer JWT (`?token=Bearer+<jwt>` or `Authorization` header). Unauthenticated connections are rejected with close code **4401**.
+
+Browser clients have their `Origin` header validated against `WS_ALLOWED_ORIGINS`; connections from disallowed origins receive close code **4403**.
+
+Per-IP and global connection caps, plus a per-connection subscription cap, are enforced; excess connections receive close code **4429**.
+
+The server sends periodic ping frames; idle clients that do not pong are reaped automatically.
+
+See [`docs/WEBSOCKET.md`](./docs/WEBSOCKET.md) for the full auth model, message format, and configuration reference.
+
 ## JWT Authentication & Key Management
 
 The Octraban backend requires an RS256 key pair to sign and verify JWT tokens securely.

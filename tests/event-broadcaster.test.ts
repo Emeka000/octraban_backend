@@ -1,4 +1,4 @@
-import { describe, expect, it, afterEach } from 'vitest';
+import { describe, expect, it, afterEach, vi } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
@@ -7,6 +7,39 @@ import {
   broadcastEvent,
   shutdownWebSocketServer,
 } from '../src/ws/eventBroadcaster';
+
+// ─── Mocks ────────────────────────────────────────────────────────────────────
+// The broadcaster now requires authentication. Mock wsAuth to always succeed
+// so these integration-style tests focus on filter logic, not auth logic.
+
+vi.mock('../src/middleware/wsAuth', () => ({
+  WS_CLOSE_UNAUTHORIZED: 4401,
+  WS_CLOSE_FORBIDDEN: 4403,
+  WS_CLOSE_LIMIT_EXCEEDED: 4429,
+  WsAuthError: class WsAuthError extends Error {
+    constructor(
+      public readonly code: number,
+      public readonly reason: string,
+    ) {
+      super(reason);
+    }
+  },
+  authenticate: vi.fn().mockResolvedValue({ identity: 'apikey:test', method: 'apikey' }),
+  validateOrigin: vi.fn(),
+}));
+
+vi.mock('../src/config', () => ({
+  config: {
+    wsAllowedOrigins: '',
+    wsMaxConnectionsGlobal: 10_000,
+    wsMaxConnectionsPerIp: 100,
+    wsMaxFiltersPerConnection: 10,
+    wsHeartbeatIntervalMs: 60_000,
+    wsIdleTimeoutMs: 120_000,
+  },
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 const servers: Server[] = [];
 

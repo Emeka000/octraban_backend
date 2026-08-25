@@ -81,6 +81,31 @@ const envSchemas = {
     .positive()
     .min(1000, 'Rate limit window must be at least 1000ms'),
   rateLimitMax: z.number().int().positive().min(1, 'Rate limit max must be at least 1'),
+  wsMaxConnectionsGlobal: z
+    .number()
+    .int()
+    .positive()
+    .max(100_000, 'WS global connection cap must be ≤ 100 000'),
+  wsMaxConnectionsPerIp: z
+    .number()
+    .int()
+    .positive()
+    .max(1000, 'WS per-IP connection cap must be ≤ 1 000'),
+  wsMaxFiltersPerConnection: z
+    .number()
+    .int()
+    .positive()
+    .max(100, 'WS filter cap per connection must be ≤ 100'),
+  wsHeartbeatIntervalMs: z
+    .number()
+    .int()
+    .positive()
+    .min(1000, 'WS heartbeat interval must be at least 1 000ms'),
+  wsIdleTimeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .min(1000, 'WS idle timeout must be at least 1 000ms'),
 };
 
 const profile: NetworkProfile = getProfile(network);
@@ -94,6 +119,11 @@ let indexerCatchupWorkers: number;
 let microBlockPollIntervalMs: number;
 let rateLimitWindowMs: number;
 let rateLimitMax: number;
+let wsMaxConnectionsGlobal: number;
+let wsMaxConnectionsPerIp: number;
+let wsMaxFiltersPerConnection: number;
+let wsHeartbeatIntervalMs: number;
+let wsIdleTimeoutMs: number;
 
 try {
   port = parseNumericEnv('PORT', process.env.PORT, 3000, envSchemas.port);
@@ -138,6 +168,36 @@ try {
     process.env.RATE_LIMIT_MAX,
     100,
     envSchemas.rateLimitMax,
+  );
+  wsMaxConnectionsGlobal = parseNumericEnv(
+    'WS_MAX_CONNECTIONS_GLOBAL',
+    process.env.WS_MAX_CONNECTIONS_GLOBAL,
+    10_000,
+    envSchemas.wsMaxConnectionsGlobal,
+  );
+  wsMaxConnectionsPerIp = parseNumericEnv(
+    'WS_MAX_CONNECTIONS_PER_IP',
+    process.env.WS_MAX_CONNECTIONS_PER_IP,
+    10,
+    envSchemas.wsMaxConnectionsPerIp,
+  );
+  wsMaxFiltersPerConnection = parseNumericEnv(
+    'WS_MAX_FILTERS_PER_CONNECTION',
+    process.env.WS_MAX_FILTERS_PER_CONNECTION,
+    10,
+    envSchemas.wsMaxFiltersPerConnection,
+  );
+  wsHeartbeatIntervalMs = parseNumericEnv(
+    'WS_HEARTBEAT_INTERVAL_MS',
+    process.env.WS_HEARTBEAT_INTERVAL_MS,
+    30_000,
+    envSchemas.wsHeartbeatIntervalMs,
+  );
+  wsIdleTimeoutMs = parseNumericEnv(
+    'WS_IDLE_TIMEOUT_MS',
+    process.env.WS_IDLE_TIMEOUT_MS,
+    120_000,
+    envSchemas.wsIdleTimeoutMs,
   );
 } catch (error) {
   // Format error message for actionable feedback
@@ -202,6 +262,17 @@ export const config = {
 
   // ── Exports ───────────────────────────────────────────────────────────────
   exportDir: process.env.EXPORT_DIR ?? '/tmp/soroban-exports',
+
+  // ── WebSocket security ────────────────────────────────────────────────────
+  // Comma-separated list of allowed Origin header values for browser clients.
+  // Example: "https://app.example.com,https://staging.example.com"
+  // Set to empty string to allow all origins (not recommended for production).
+  wsAllowedOrigins: (process.env.WS_ALLOWED_ORIGINS ?? '').trim(),
+  wsMaxConnectionsGlobal,
+  wsMaxConnectionsPerIp,
+  wsMaxFiltersPerConnection,
+  wsHeartbeatIntervalMs,
+  wsIdleTimeoutMs,
 
   // ── Predictive analytics ──────────────────────────────────────────────────
   forecastMode: process.env.FORECAST_MODE === 'production' ? 'production' : 'demo',
